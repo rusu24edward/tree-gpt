@@ -338,6 +338,10 @@ export default function Home() {
                       treeRefs.current.delete(tree.id);
                     }
                   }}
+                  onClick={() => {
+                    if (isEditing || isPending) return;
+                    handleSelectTree(tree.id);
+                  }}
                 >
                   {isEditing ? (
                     <form
@@ -378,7 +382,11 @@ export default function Home() {
                         <button
                           type="button"
                           className="tree-item-main"
-                          onClick={() => handleSelectTree(tree.id)}
+                          onClick={(evt) => {
+                            evt.stopPropagation();
+                            if (isPending) return;
+                            handleSelectTree(tree.id);
+                          }}
                           disabled={isPending}
                         >
                           <span className="tree-title">{displayTitle}</span>
@@ -605,12 +613,15 @@ export default function Home() {
           align-items: center;
           justify-content: space-between;
           gap: 12px;
+          width: 100%;
         }
         .tree-item-main {
           display: flex;
           align-items: center;
           justify-content: flex-start;
           gap: 12px;
+          flex: 1;
+          width: 100%;
           background: transparent !important;
           border: none !important;
           box-shadow: none !important;
@@ -661,6 +672,8 @@ export default function Home() {
           pointer-events: auto;
         }
         .tree-title {
+          display: block;
+          text-align: left;
           font-size: 14px;
           font-weight: 600;
           flex: 1;
