@@ -287,7 +287,7 @@ function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive }: Pr
         edgesUpdatable={false}
         selectNodesOnDrag={false}
         panOnDrag
-        panOnScroll
+        panOnScroll={false}
         zoomOnScroll
         zoomOnPinch
         fitView={false}
