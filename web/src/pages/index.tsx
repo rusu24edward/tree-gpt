@@ -16,6 +16,7 @@ export default function Home() {
   const [editingTreeId, setEditingTreeId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [pendingTreeId, setPendingTreeId] = useState<string | null>(null);
+  const [blankTreeId, setBlankTreeId] = useState<string | null>(null);
 
   const hasMessages = graph.nodes.length > 0;
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
@@ -68,12 +69,18 @@ export default function Home() {
           });
         }
 
+        if (data.nodes.length === 0) {
+          setBlankTreeId(treeId);
+        } else if (blankTreeId === treeId) {
+          setBlankTreeId(null);
+        }
+
         return data;
       } finally {
         setIsSyncingGraph(false);
       }
     },
-    []
+    [blankTreeId]
   );
 
   useEffect(() => {
@@ -86,7 +93,7 @@ export default function Home() {
   }, [activeTreeId, refreshGraph]);
 
   const handleCreateTree = useCallback(async () => {
-    if (isEmptyConversation) return;
+    if (isEmptyConversation || blankTreeId) return;
     setIsLoadingTrees(true);
     try {
       const newTree = await fetchJSON<TreeOut>('/api/trees', {
@@ -96,14 +103,29 @@ export default function Home() {
       setTrees((prev) => [newTree, ...prev]);
       setActiveNodeId(null);
       setActiveTreeId(newTree.id);
+      setBlankTreeId(newTree.id);
     } finally {
       setIsLoadingTrees(false);
     }
-  }, [isEmptyConversation]);
+  }, [blankTreeId, isEmptyConversation]);
 
   const handleSelectTree = useCallback(
-    (treeId: string) => {
+    async (treeId: string) => {
       if (treeId === activeTreeId) return;
+
+      if (blankTreeId && blankTreeId === activeTreeId && isEmptyConversation) {
+        try {
+          await fetchJSON(`/api/trees/${blankTreeId}`, { method: 'DELETE' });
+        } catch (err) {
+          console.error('Failed to discard empty conversation', err);
+        }
+        setTrees((prev) => prev.filter((t) => t.id !== blankTreeId));
+        setBlankTreeId(null);
+        setGraph({ nodes: [], edges: [] });
+        setActiveNodeId(null);
+        setActiveTreeId(null);
+      }
+
       if (editingTreeId && editingTreeId !== treeId) {
         setEditingTreeId(null);
         setEditingTitle('');
@@ -111,7 +133,7 @@ export default function Home() {
       setActiveNodeId(null);
       setActiveTreeId(treeId);
     },
-    [activeTreeId, editingTreeId]
+    [activeTreeId, blankTreeId, editingTreeId, isEmptyConversation]
   );
 
   const handleStartRename = useCallback((tree: TreeOut) => {
@@ -163,6 +185,9 @@ export default function Home() {
         await fetchJSON(`/api/trees/${treeId}`, { method: 'DELETE' });
         const wasActive = treeId === activeTreeId;
         const wasEditing = treeId === editingTreeId;
+        if (blankTreeId === treeId) {
+          setBlankTreeId(null);
+        }
         setTrees((prev) => {
           const next = prev.filter((t) => t.id !== treeId);
           if (wasActive) {
@@ -183,7 +208,7 @@ export default function Home() {
         setPendingTreeId(null);
       }
     },
-    [activeTreeId, editingTreeId]
+    [activeTreeId, blankTreeId, editingTreeId]
   );
 
   const handleDeleteActive = useCallback(async () => {
@@ -198,11 +223,14 @@ export default function Home() {
   const handleAfterSend = useCallback(
     (newAssistantId: string) => {
       setActiveNodeId(newAssistantId);
+      if (blankTreeId === activeTreeId) {
+        setBlankTreeId(null);
+      }
       if (activeTreeId) {
         refreshGraph(activeTreeId);
       }
     },
-    [activeTreeId, refreshGraph]
+    [activeTreeId, blankTreeId, refreshGraph]
   );
 
   const renameInputRef = useRef<HTMLInputElement | null>(null);
@@ -239,7 +267,7 @@ export default function Home() {
           <small>API: {API_BASE}</small>
         </div>
         <div className="header-actions">
-          <button onClick={handleCreateTree} disabled={isLoadingTrees || isEmptyConversation}>
+          <button onClick={handleCreateTree} disabled={isLoadingTrees || blankTreeId !== null}>
             New conversation
           </button>
         </div>
@@ -249,7 +277,7 @@ export default function Home() {
         <aside className="trees">
           <div className="trees-header">
             <span>Conversations</span>
-            <button onClick={handleCreateTree} disabled={isLoadingTrees || isEmptyConversation}>
+            <button onClick={handleCreateTree} disabled={isLoadingTrees || blankTreeId !== null}>
               + New
             </button>
           </div>
@@ -268,7 +296,7 @@ export default function Home() {
                   className={`tree-item ${isActive ? 'active' : ''}`}
                   onClick={() => {
                     if (isEditing || isPending) return;
-                    handleSelectTree(tree.id);
+                    void handleSelectTree(tree.id);
                   }}
                 >
                   {isEditing ? (
@@ -313,7 +341,7 @@ export default function Home() {
                           onClick={(evt) => {
                             evt.stopPropagation();
                             if (isPending) return;
-                            handleSelectTree(tree.id);
+                            void handleSelectTree(tree.id);
                           }}
                           disabled={isPending}
                         >
