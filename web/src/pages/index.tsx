@@ -16,8 +16,6 @@ export default function Home() {
   const [editingTreeId, setEditingTreeId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [pendingTreeId, setPendingTreeId] = useState<string | null>(null);
-  const [menuTreeId, setMenuTreeId] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
   const activeNode = useMemo(() => graph.nodes.find((n) => n.id === activeNodeId) ?? null, [graph, activeNodeId]);
@@ -107,8 +105,6 @@ export default function Home() {
         setEditingTreeId(null);
         setEditingTitle('');
       }
-      setMenuTreeId(null);
-      setMenuPosition(null);
       setActiveNodeId(null);
       setActiveTreeId(treeId);
     },
@@ -116,8 +112,6 @@ export default function Home() {
   );
 
   const handleStartRename = useCallback((tree: TreeOut) => {
-    setMenuTreeId(null);
-    setMenuPosition(null);
     setEditingTreeId(tree.id);
     setEditingTitle(tree.title ?? '');
   }, []);
@@ -161,8 +155,6 @@ export default function Home() {
     async (treeId: string) => {
       const confirmed = window.confirm('Delete this conversation and all its messages?');
       if (!confirmed) return;
-      setMenuTreeId(null);
-      setMenuPosition(null);
       setPendingTreeId(treeId);
       try {
         await fetchJSON(`/api/trees/${treeId}`, { method: 'DELETE' });
@@ -210,42 +202,10 @@ export default function Home() {
     [activeTreeId, refreshGraph]
   );
 
-  const treeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const renameInputRef = useRef<HTMLInputElement | null>(null);
-
-  const handleToggleMenu = useCallback(
-    (treeId: string) => {
-      if (menuTreeId === treeId) {
-        setMenuTreeId(null);
-        setMenuPosition(null);
-        return;
-      }
-
-      const anchor = treeRefs.current.get(treeId);
-      if (!anchor) return;
-
-      const rect = anchor.getBoundingClientRect();
-      const menuWidth = 176;
-      const menuHeight = 160;
-      const padding = 16;
-      const maxLeft = window.innerWidth - menuWidth - padding;
-      const tentativeLeft = rect.right - menuWidth;
-      const left = Math.min(Math.max(tentativeLeft, padding), maxLeft);
-      const desiredTop = rect.bottom + 8;
-      const maxTop = window.innerHeight - menuHeight - padding;
-      const minTop = padding;
-      const top = Math.min(Math.max(desiredTop, minTop), maxTop);
-
-      setMenuPosition({ top, left });
-      setMenuTreeId(treeId);
-    },
-    [menuTreeId]
-  );
 
   const handleMenuRename = useCallback(
     (tree: TreeOut) => {
-      setMenuTreeId(null);
-      setMenuPosition(null);
       handleStartRename(tree);
     },
     [handleStartRename]
@@ -253,36 +213,10 @@ export default function Home() {
 
   const handleMenuDelete = useCallback(
     (treeId: string) => {
-      setMenuTreeId(null);
-      setMenuPosition(null);
       handleDeleteTree(treeId);
     },
     [handleDeleteTree]
   );
-
-  useEffect(() => {
-    if (!menuTreeId) return;
-    function handleDismiss() {
-      setMenuTreeId(null);
-      setMenuPosition(null);
-    }
-    function handleKey(evt: KeyboardEvent) {
-      if (evt.key === 'Escape') {
-        setMenuTreeId(null);
-        setMenuPosition(null);
-      }
-    }
-    window.addEventListener('click', handleDismiss);
-    window.addEventListener('scroll', handleDismiss, true);
-    window.addEventListener('resize', handleDismiss);
-    window.addEventListener('keydown', handleKey);
-    return () => {
-      window.removeEventListener('click', handleDismiss);
-      window.removeEventListener('scroll', handleDismiss, true);
-      window.removeEventListener('resize', handleDismiss);
-      window.removeEventListener('keydown', handleKey);
-    };
-  }, [menuTreeId]);
 
   useEffect(() => {
     if (editingTreeId && renameInputRef.current) {
@@ -325,19 +259,10 @@ export default function Home() {
               const isPending = pendingTreeId === tree.id;
               const hasMutation = pendingTreeId !== null;
               const displayTitle = tree.title && tree.title.trim().length > 0 ? tree.title : 'Untitled conversation';
-              const isMenuOpen = menuTreeId === tree.id;
-
               return (
                 <div
                   key={tree.id}
-                  className={`tree-item ${isActive ? 'active' : ''} ${isMenuOpen ? 'menu-open' : ''}`}
-                  ref={(node) => {
-                    if (node) {
-                      treeRefs.current.set(tree.id, node);
-                    } else {
-                      treeRefs.current.delete(tree.id);
-                    }
-                  }}
+                  className={`tree-item ${isActive ? 'active' : ''}`}
                   onClick={() => {
                     if (isEditing || isPending) return;
                     handleSelectTree(tree.id);
@@ -391,65 +316,35 @@ export default function Home() {
                         >
                           <span className="tree-title">{displayTitle}</span>
                         </button>
-                        <button
-                          type="button"
-                          className="tree-item-menu-trigger"
-                          onClick={(evt) => {
-                            evt.stopPropagation();
-                            evt.preventDefault();
-                            if (!hasMutation) {
-                              handleToggleMenu(tree.id);
-                            }
-                          }}
-                          disabled={hasMutation}
-                          aria-haspopup="menu"
-                          aria-expanded={isMenuOpen}
-                          aria-label="Conversation actions"
-                        >
-                          ...
-                        </button>
-                      </div>
-                      {isMenuOpen && (
-                        <div
-                          className="tree-item-menu"
-                          role="menu"
-                          style={
-                            menuPosition
-                              ? {
-                                  position: 'fixed',
-                                  zIndex: 40,
-                                  top: menuPosition.top,
-                                  left: menuPosition.left,
-                                }
-                              : undefined
-                          }
-                          onClick={(evt) => evt.stopPropagation()}
-                        >
+                        <div className="tree-item-icons">
                           <button
                             type="button"
-                            role="menuitem"
+                            className="icon-button"
                             onClick={(evt) => {
                               evt.stopPropagation();
+                              if (hasMutation || isLoadingTrees) return;
                               handleMenuRename(tree);
                             }}
                             disabled={hasMutation || isLoadingTrees}
+                            aria-label="Rename conversation"
                           >
-                            Rename
+                            ✏️
                           </button>
                           <button
                             type="button"
-                            className="danger"
-                            role="menuitem"
+                            className="icon-button danger"
                             onClick={(evt) => {
                               evt.stopPropagation();
+                              if (hasMutation) return;
                               handleMenuDelete(tree.id);
                             }}
                             disabled={hasMutation}
+                            aria-label="Delete conversation"
                           >
-                            Delete
+                            🗑️
                           </button>
                         </div>
-                      )}
+                      </div>
                     </>
                   )}
                 </div>
@@ -617,7 +512,7 @@ export default function Home() {
         }
         .tree-item-main {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: flex-start;
           gap: 12px;
           flex: 1;
@@ -626,50 +521,48 @@ export default function Home() {
           border: none !important;
           box-shadow: none !important;
           padding: 0;
-          padding-right: 36px;
           font: inherit;
           color: inherit;
+          text-align: left;
           cursor: pointer;
         }
         .tree-item-main:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
-        .tree-item-menu-trigger {
-          position: absolute;
-          top: 50%;
-          right: 0;
-          transform: translateY(-50%);
-          border-radius: 999px;
-          border: 1px solid #c7cff9;
-          background: rgba(148, 163, 184, 0.2);
+        .tree-item-icons {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .icon-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 10px;
+          border: 1px solid rgba(99, 102, 241, 0.35);
+          background: rgba(99, 102, 241, 0.12);
           color: #1e293b;
-          padding: 6px 12px;
-          font-size: 14px;
-          font-weight: 600;
-          line-height: 1;
+          font-size: 16px;
           box-shadow: none;
-          transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
-          opacity: 0;
-          pointer-events: none;
+          transition: transform 0.18s ease, box-shadow 0.18s ease;
         }
-        .tree-item-menu-trigger:hover:enabled {
-          transform: translateY(calc(-50% - 2px));
-          box-shadow: 0 10px 18px rgba(79, 97, 185, 0.18);
+        .icon-button:hover:enabled {
+          transform: translateY(-1px);
+          box-shadow: 0 12px 20px rgba(79, 97, 185, 0.18);
         }
-        .tree-item-menu-trigger:disabled {
+        .icon-button:disabled {
           opacity: 0.5;
           cursor: not-allowed;
-          transform: translateY(-50%);
           box-shadow: none;
+          transform: none;
         }
-        .tree-item:hover .tree-item-menu-trigger,
-        .tree-item.menu-open .tree-item-menu-trigger,
-        .tree-item-menu-trigger:focus,
-        .tree-item-menu-trigger:focus-visible,
-        .tree-item-menu-trigger:active {
-          opacity: 1;
-          pointer-events: auto;
+        .icon-button.danger {
+          border-color: #fecaca;
+          background: #fee2e2;
+          color: #b91c1c;
         }
         .tree-title {
           display: block;
@@ -677,44 +570,7 @@ export default function Home() {
           font-size: 14px;
           font-weight: 600;
           flex: 1;
-        }
-        .tree-item-menu {
-          position: fixed;
-          z-index: 40;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-          background: rgba(255, 255, 255, 0.95);
-          border: 1px solid #dbe3f5;
-          border-radius: 14px;
-          padding: 8px;
-          box-shadow: 0 20px 36px rgba(30, 64, 175, 0.18);
-          min-width: 176px;
-          pointer-events: auto;
-        }
-        .tree-item-menu button {
-          border-radius: 10px;
-          border: none;
-          background: transparent;
-          color: #1e293b;
-          padding: 8px 12px;
-          font-size: 13px;
-          font-weight: 600;
-          text-align: left;
-          box-shadow: none;
-          transition: background 0.18s ease, transform 0.18s ease;
-        }
-        .tree-item-menu button:hover:enabled {
-          background: rgba(99, 102, 241, 0.12);
-          transform: translateX(2px);
-        }
-        .tree-item-menu button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          transform: none;
-        }
-        .tree-item-menu .danger {
-          color: #b91c1c;
+          word-break: break-word;
         }
         .tree-item-edit-actions button {
           border-radius: 999px;
