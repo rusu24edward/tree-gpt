@@ -294,9 +294,6 @@ export default function Home() {
           <button onClick={handleCreateTree} disabled={isLoadingTrees}>
             New conversation
           </button>
-          <button onClick={() => activeTreeId && refreshGraph(activeTreeId)} disabled={!activeTreeId || isSyncingGraph}>
-            Refresh graph
-          </button>
         </div>
       </header>
 
