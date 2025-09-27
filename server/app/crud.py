@@ -22,6 +22,15 @@ def delete_tree(db: Session, tree_id: UUID) -> int:
     db.commit()
     return 1
 
+def update_tree_title(db: Session, tree_id: UUID, title: Optional[str]) -> Optional[models.Tree]:
+    tree = db.query(models.Tree).filter(models.Tree.id == tree_id).first()
+    if not tree:
+        return None
+    tree.title = title
+    db.commit()
+    db.refresh(tree)
+    return tree
+
 def create_message(db: Session, tree_id: UUID, role: str, content: str, parent_id: Optional[UUID] = None) -> models.Message:
     m = models.Message(tree_id=tree_id, role=role, content=content, parent_id=parent_id)
     db.add(m)
@@ -79,4 +88,3 @@ def delete_subtree(db: Session, message_id: UUID) -> int:
     rows = db.execute(sql, {"mid": str(message_id)}).fetchall()
     db.commit()
     return len(rows)
-

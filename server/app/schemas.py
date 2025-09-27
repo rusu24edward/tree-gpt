@@ -5,6 +5,9 @@ from uuid import UUID
 class TreeCreate(BaseModel):
     title: Optional[str] = None
 
+class TreeUpdate(BaseModel):
+    title: Optional[str] = None
+
 class TreeOut(BaseModel):
     id: UUID
     title: Optional[str] = None
