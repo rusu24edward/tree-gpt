@@ -211,6 +211,7 @@ export default function Home() {
   );
 
   const treeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleToggleMenu = useCallback(
     (treeId: string) => {
@@ -283,6 +284,16 @@ export default function Home() {
     };
   }, [menuTreeId]);
 
+  useEffect(() => {
+    if (editingTreeId && renameInputRef.current) {
+      const input = renameInputRef.current;
+      requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+      });
+    }
+  }, [editingTreeId]);
+
   return (
     <div className="app">
       <header>
@@ -338,7 +349,9 @@ export default function Home() {
                         value={editingTitle}
                         onChange={(e) => setEditingTitle(e.target.value)}
                         placeholder="Conversation title"
-                        autoFocus
+                        ref={(node) => {
+                          renameInputRef.current = node;
+                        }}
                         onKeyDown={(evt) => {
                           if (evt.key === 'Escape') {
                             evt.preventDefault();
