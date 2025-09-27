@@ -58,6 +58,24 @@ function layoutNodes(data: GraphResponse): Record<string, { x: number; y: number
       pos[n.id] = { x: (i % 4) * NODE_HORIZONTAL_GAP, y: Math.floor(i / 4) * NODE_VERTICAL_GAP };
     });
   }
+
+  const entries = Object.values(pos);
+  if (entries.length > 0) {
+    const minX = Math.min(...entries.map((p) => p.x));
+    const maxX = Math.max(...entries.map((p) => p.x));
+    const minY = Math.min(...entries.map((p) => p.y));
+    const maxY = Math.max(...entries.map((p) => p.y));
+    const offsetX = (minX + maxX) / 2;
+    const offsetY = (minY + maxY) / 2;
+
+    Object.keys(pos).forEach((id) => {
+      pos[id] = {
+        x: pos[id].x - offsetX,
+        y: pos[id].y - offsetY,
+      };
+    });
+  }
+
   return pos;
 }
 
@@ -151,7 +169,46 @@ function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive }: Pr
 
     const raf = requestAnimationFrame(() => {
       if (initialViewDone.current || nodes.length === 0) return;
-      reactFlow.fitView({ padding: 0.18 });
+
+      const wrapper = wrapperRef.current;
+      if (!wrapper) return;
+
+      const { width: viewWidth, height: viewHeight } = wrapper.getBoundingClientRect();
+      if (viewWidth === 0 || viewHeight === 0) return;
+
+      const metrics = nodes.map((node) => {
+        const pos = getNodeWorldPosition(node);
+        const width = node.width ?? NODE_FALLBACK_WIDTH;
+        const height = node.height ?? NODE_FALLBACK_HEIGHT;
+        return {
+          minX: pos.x,
+          maxX: pos.x + width,
+          minY: pos.y,
+          maxY: pos.y + height,
+        };
+      });
+
+      const minX = Math.min(...metrics.map((m) => m.minX));
+      const maxX = Math.max(...metrics.map((m) => m.maxX));
+      const minY = Math.min(...metrics.map((m) => m.minY));
+      const maxY = Math.max(...metrics.map((m) => m.maxY));
+
+      const contentWidth = Math.max(maxX - minX, NODE_FALLBACK_WIDTH);
+      const contentHeight = Math.max(maxY - minY, NODE_FALLBACK_HEIGHT);
+
+      const padding = 160;
+      const zoomForWidth = viewWidth / (contentWidth + padding);
+      const zoomForHeight = viewHeight / (contentHeight + padding);
+      const computedZoom = Math.min(zoomForWidth, zoomForHeight);
+      const clampedZoom = clamp(computedZoom, 0.25, 1.5);
+
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      const targetX = viewWidth / 2 - centerX * clampedZoom;
+      const targetY = viewHeight / 2 - centerY * clampedZoom;
+
+      reactFlow.setViewport({ x: targetX, y: targetY, zoom: clampedZoom });
       initialViewDone.current = true;
     });
 
