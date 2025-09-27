@@ -9,15 +9,7 @@ router = APIRouter(prefix="/trees", tags=["trees"])
 
 @router.post("", response_model=schemas.TreeOut)
 def create_tree(payload: schemas.TreeCreate, db: Session = Depends(get_db)):
-    t = crud.create_tree(db, title=payload.title)
-    # Optional: seed a visible root node so the graph isn't empty
-    crud.create_message(
-        db,
-        tree_id=t.id,
-        role="system",
-        content="(root) – start a branch by selecting me or just send a message."
-    )
-    return t
+    return crud.create_tree(db, title=payload.title)
 
 @router.get("")
 def list_trees(db: Session = Depends(get_db)):

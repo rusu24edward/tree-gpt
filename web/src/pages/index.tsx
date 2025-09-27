@@ -17,8 +17,10 @@ export default function Home() {
   const [editingTitle, setEditingTitle] = useState('');
   const [pendingTreeId, setPendingTreeId] = useState<string | null>(null);
 
+  const hasMessages = graph.nodes.length > 0;
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
   const activeNode = useMemo(() => graph.nodes.find((n) => n.id === activeNodeId) ?? null, [graph, activeNodeId]);
+  const isEmptyConversation = Boolean(activeTreeId) && !hasMessages;
 
   const ensureInitialTree = useCallback(async () => {
     setIsLoadingTrees(true);
@@ -84,6 +86,7 @@ export default function Home() {
   }, [activeTreeId, refreshGraph]);
 
   const handleCreateTree = useCallback(async () => {
+    if (isEmptyConversation) return;
     setIsLoadingTrees(true);
     try {
       const newTree = await fetchJSON<TreeOut>('/api/trees', {
@@ -96,7 +99,7 @@ export default function Home() {
     } finally {
       setIsLoadingTrees(false);
     }
-  }, []);
+  }, [isEmptyConversation]);
 
   const handleSelectTree = useCallback(
     (treeId: string) => {
@@ -236,7 +239,7 @@ export default function Home() {
           <small>API: {API_BASE}</small>
         </div>
         <div className="header-actions">
-          <button onClick={handleCreateTree} disabled={isLoadingTrees}>
+          <button onClick={handleCreateTree} disabled={isLoadingTrees || isEmptyConversation}>
             New conversation
           </button>
         </div>
@@ -246,7 +249,7 @@ export default function Home() {
         <aside className="trees">
           <div className="trees-header">
             <span>Conversations</span>
-            <button onClick={handleCreateTree} disabled={isLoadingTrees}>
+            <button onClick={handleCreateTree} disabled={isLoadingTrees || isEmptyConversation}>
               + New
             </button>
           </div>
@@ -374,6 +377,7 @@ export default function Home() {
             onAfterSend={handleAfterSend}
             onDeleteNode={handleDeleteActive}
             isDeleteDisabled={!activeNode || !activeNode.parent_id}
+            showEmptyOverlay={isEmptyConversation}
           />
         </div>
       </main>

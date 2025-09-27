@@ -9,6 +9,7 @@ type Props = {
   onAfterSend: (assistantId: string) => void;
   onDeleteNode?: () => void;
   isDeleteDisabled?: boolean;
+  showEmptyOverlay?: boolean;
 };
 
 export default function ChatPane({
@@ -18,6 +19,7 @@ export default function ChatPane({
   onAfterSend,
   onDeleteNode,
   isDeleteDisabled,
+  showEmptyOverlay,
 }: Props) {
   const [path, setPath] = useState<PathResponse['path']>([]);
   const [input, setInput] = useState('');
@@ -26,6 +28,8 @@ export default function ChatPane({
     () => activeNodeId ?? defaultParentId ?? null,
     [activeNodeId, defaultParentId]
   );
+
+  const showStartPrompt = Boolean(showEmptyOverlay && path.length === 0);
 
   useEffect(() => {
     async function load() {
@@ -79,9 +83,12 @@ export default function ChatPane({
       </div>
 
       <div className="scroll">
-        {path.length === 0 && (
+        {showStartPrompt && (
+          <div className="start-banner">Start chatting to get started</div>
+        )}
+        {path.length === 0 && !showStartPrompt && (
           <div className="placeholder">
-            Select a node in the graph, or just start typing — your first message will attach to the <b>root</b>.
+            Select a node in the graph, or start typing to begin a new branch from here.
           </div>
         )}
         {path.map((m, idx) => (
@@ -145,6 +152,13 @@ export default function ChatPane({
           display: flex;
           flex-direction: column;
           gap: 16px;
+        }
+        .start-banner {
+          text-align: center;
+          font-size: 18px;
+          font-weight: 600;
+          color: rgba(15, 23, 42, 0.55);
+          margin: 40px auto 12px;
         }
         .placeholder {
           font-size: 14px;
