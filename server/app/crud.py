@@ -41,6 +41,9 @@ def create_message(db: Session, tree_id: UUID, role: str, content: str, parent_i
 def get_tree_messages(db: Session, tree_id: UUID) -> List[models.Message]:
     return db.query(models.Message).filter(models.Message.tree_id == tree_id).order_by(models.Message.created_at.asc()).all()
 
+def get_message(db: Session, message_id: UUID) -> Optional[models.Message]:
+    return db.query(models.Message).filter(models.Message.id == message_id).first()
+
 def get_path_to_root(db: Session, message_id: UUID) -> List[Dict[str, Any]]:
     sql = text("""
     WITH RECURSIVE path AS (

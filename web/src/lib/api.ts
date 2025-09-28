@@ -12,7 +12,14 @@ export async function fetchJSON<T>(path: string, opts?: RequestInit): Promise<T>
   return res.json();
 }
 
-export type GraphNode = { id: string; label: string; role: string; parent_id?: string | null };
+export type GraphNode = {
+  id: string;
+  role: string;
+  label: string;
+  parent_id?: string | null;
+  user_label?: string | null;
+  assistant_label?: string | null;
+};
 export type GraphEdge = { id: string; source: string; target: string };
 export type GraphResponse = { nodes: GraphNode[]; edges: GraphEdge[] };
 export type TreeOut = { id: string; title?: string | null };

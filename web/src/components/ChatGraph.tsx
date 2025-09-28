@@ -109,28 +109,43 @@ function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive }: Pr
 
   useEffect(() => {
     const positions = layoutNodes(data);
-    const nextNodes: Node[] = data.nodes.map((n) => ({
-      id: n.id,
-      data: {
-        label: `${n.role === 'assistant' ? '🤖 ' : n.role === 'user' ? '🧑 ' : ''}${n.label}`,
-      },
-      position: positions[n.id] ?? { x: 0, y: 0 },
-      draggable: false,
-      style: {
-        border: n.id === activeNodeId ? '2px solid #8a9aff' : '1px solid #d0d7e2',
-        borderRadius: 16,
-        padding: 10,
-        background: n.role === 'assistant' ? '#ffffff' : '#f7f8ff',
-        color: '#0f172a',
-        fontSize: 13,
-        fontWeight: 500,
-        boxShadow: '0 12px 24px rgba(15, 23, 42, 0.08)',
-        maxWidth: 260,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-      },
-    }));
+    const nextNodes: Node[] = data.nodes.map((n) => {
+      const lines: string[] = [];
+      if (n.user_label) {
+        lines.push(`🧑 ${n.user_label}`);
+      }
+      if (n.assistant_label) {
+        lines.push(`🤖 ${n.assistant_label}`);
+      }
+      const label = lines.length > 0 ? lines.join('\n') : n.label;
+
+      const isSystem = n.role === 'system';
+      const isPendingUser = n.role === 'user';
+      const background = isSystem ? '#fefce8' : isPendingUser ? '#f1f5ff' : '#ffffff';
+      const borderColor = n.id === activeNodeId ? '#8a9aff' : isSystem ? '#facc15' : '#d0d7e2';
+
+      return {
+        id: n.id,
+        data: { label },
+        position: positions[n.id] ?? { x: 0, y: 0 },
+        draggable: false,
+        style: {
+          border: n.id === activeNodeId ? '2px solid #8a9aff' : `1px solid ${borderColor}`,
+          borderRadius: 16,
+          padding: 14,
+          background,
+          color: '#0f172a',
+          fontSize: 13,
+          fontWeight: 500,
+          lineHeight: 1.45,
+          boxShadow: '0 12px 24px rgba(15, 23, 42, 0.08)',
+          maxWidth: 280,
+          overflow: 'hidden',
+          whiteSpace: 'pre-wrap',
+          textOverflow: 'ellipsis',
+        },
+      } as Node;
+    });
 
     const nextEdges: Edge[] = data.edges.map((e) => ({
       id: e.id,

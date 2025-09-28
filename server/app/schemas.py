@@ -30,9 +30,11 @@ class MessageOut(BaseModel):
 
 class GraphNode(BaseModel):
     id: str
-    label: str
     role: str
+    label: str
     parent_id: Optional[str] = None
+    user_label: Optional[str] = None
+    assistant_label: Optional[str] = None
 
 class GraphEdge(BaseModel):
     id: str

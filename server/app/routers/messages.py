@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -12,21 +12,107 @@ router = APIRouter(prefix="/messages", tags=["messages"])
 @router.get("/graph/{tree_id}", response_model=schemas.GraphResponse)
 def get_graph(tree_id: UUID, db: Session = Depends(get_db)):
     msgs = crud.get_tree_messages(db, tree_id)
-    nodes = []
-    edges = []
-    for m in msgs:
-        nodes.append({
-            "id": str(m.id),
-            "label": (m.content[:48] + "…") if len(m.content) > 48 else m.content,
-            "role": m.role,
-            "parent_id": str(m.parent_id) if m.parent_id else None
+    by_id: Dict[UUID, models.Message] = {m.id: m for m in msgs}
+
+    def collapse_whitespace(text: str) -> str:
+        return " ".join(text.strip().split())
+
+    def make_excerpt(text: str, limit: int = 72) -> str:
+        snapped = collapse_whitespace(text)
+        if len(snapped) <= limit:
+            return snapped
+        return snapped[: limit - 1].rstrip() + "…"
+
+    def compose_label(user_excerpt: Optional[str], assistant_excerpt: Optional[str]) -> str:
+        parts: List[str] = []
+        if user_excerpt:
+            parts.append(f"You: {user_excerpt}")
+        if assistant_excerpt:
+            parts.append(f"LLM: {assistant_excerpt}")
+        if not parts:
+            return "(empty)"
+        return "\n".join(parts)
+
+    nodes: List[Dict[str, Optional[str]]] = []
+    edges: List[Dict[str, str]] = []
+
+    def add_edge(parent: Optional[str], child: str) -> None:
+        if not parent:
+            return
+        edges.append({
+            "id": f"{parent}->{child}",
+            "source": parent,
+            "target": child,
         })
-        if m.parent_id:
-            edges.append({
-                "id": f"{m.parent_id}->{m.id}",
-                "source": str(m.parent_id),
-                "target": str(m.id)
-            })
+
+    handled_user_ids = set()
+
+    # First pass: system/root messages (keep as standalone nodes)
+    for m in msgs:
+        if m.role != "system":
+            continue
+        parent_id = str(m.parent_id) if m.parent_id else None
+        label = make_excerpt(m.content)
+        node = {
+            "id": str(m.id),
+            "role": "system",
+            "label": label,
+            "parent_id": parent_id,
+            "user_label": None,
+            "assistant_label": label,
+        }
+        nodes.append(node)
+        add_edge(parent_id, str(m.id))
+
+    # Second pass: combine user prompt + assistant reply into a single node
+    for m in msgs:
+        if m.role != "assistant":
+            continue
+
+        parent_user = by_id.get(m.parent_id) if m.parent_id else None
+        user_excerpt = None
+        parent_id: Optional[str] = None
+
+        if parent_user and parent_user.role == "user":
+            user_excerpt = make_excerpt(parent_user.content)
+            if parent_user.parent_id:
+                parent_id = str(parent_user.parent_id)
+            handled_user_ids.add(parent_user.id)
+        else:
+            parent_id = str(m.parent_id) if m.parent_id else None
+
+        assistant_excerpt = make_excerpt(m.content)
+        label = compose_label(user_excerpt, assistant_excerpt)
+
+        node = {
+            "id": str(m.id),
+            "role": "turn",
+            "label": label,
+            "parent_id": parent_id,
+            "user_label": user_excerpt,
+            "assistant_label": assistant_excerpt,
+        }
+        nodes.append(node)
+        add_edge(parent_id, str(m.id))
+
+    # Fallback: orphaned user messages (no assistant child yet)
+    for m in msgs:
+        if m.role != "user" or m.id in handled_user_ids:
+            continue
+        parent_id = str(m.parent_id) if m.parent_id else None
+        user_excerpt = make_excerpt(m.content)
+        label = compose_label(user_excerpt, None)
+        node = {
+            "id": str(m.id),
+            "role": "user",
+            "label": label,
+            "parent_id": parent_id,
+            "user_label": user_excerpt,
+            "assistant_label": None,
+        }
+        nodes.append(node)
+        add_edge(parent_id, str(m.id))
+
     return {"nodes": nodes, "edges": edges}
 
 @router.get("/path/{message_id}", response_model=schemas.PathResponse)
@@ -76,7 +162,17 @@ def post_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
 
 @router.delete("/{message_id}")
 def delete_message(message_id: UUID, db: Session = Depends(get_db)):
-    deleted = crud.delete_subtree(db, message_id)
+    target = crud.get_message(db, message_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    delete_id = target.id
+    if target.role == "assistant" and target.parent_id:
+        parent = crud.get_message(db, target.parent_id)
+        if parent and parent.role == "user":
+            delete_id = parent.id
+
+    deleted = crud.delete_subtree(db, delete_id)
     if deleted == 0:
         raise HTTPException(status_code=404, detail="Message not found")
     return {"deleted": deleted}
