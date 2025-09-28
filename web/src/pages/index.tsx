@@ -27,22 +27,13 @@ export default function Home() {
     setIsLoadingTrees(true);
     try {
       const list = await fetchJSON<TreeOut[]>('/api/trees');
-      if (list.length === 0) {
-        const created = await fetchJSON<TreeOut>('/api/trees', {
-          method: 'POST',
-          body: JSON.stringify({ title: 'My Conversation' }),
-        });
-        setTrees([created]);
-        setActiveTreeId(created.id);
-      } else {
-        setTrees(list);
-        setActiveTreeId((prev) => {
-          if (prev && list.some((t) => t.id === prev)) {
-            return prev;
-          }
-          return list[0].id;
-        });
-      }
+      setTrees(list);
+      setActiveTreeId((prev) => {
+        if (prev && list.some((t) => t.id === prev)) {
+          return prev;
+        }
+        return list[0]?.id ?? null;
+      });
     } finally {
       setIsLoadingTrees(false);
     }
@@ -235,6 +226,31 @@ export default function Home() {
 
   const renameInputRef = useRef<HTMLInputElement | null>(null);
 
+  const ensureActiveTree = useCallback(async () => {
+    if (activeTreeId) {
+      return activeTreeId;
+    }
+    if (blankTreeId) {
+      return blankTreeId;
+    }
+
+    setIsLoadingTrees(true);
+    try {
+      const newTree = await fetchJSON<TreeOut>('/api/trees', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'New Conversation' }),
+      });
+      setTrees((prev) => [newTree, ...prev]);
+      setActiveTreeId(newTree.id);
+      setActiveNodeId(null);
+      setGraph({ nodes: [], edges: [] });
+      setBlankTreeId(newTree.id);
+      return newTree.id;
+    } finally {
+      setIsLoadingTrees(false);
+    }
+  }, [activeTreeId, blankTreeId]);
+
   const handleMenuRename = useCallback(
     (tree: TreeOut) => {
       handleStartRename(tree);
@@ -406,6 +422,7 @@ export default function Home() {
             onDeleteNode={handleDeleteActive}
             isDeleteDisabled={!activeNode || !activeNode.parent_id}
             showEmptyOverlay={isEmptyConversation}
+            onEnsureTree={ensureActiveTree}
           />
         </div>
       </main>

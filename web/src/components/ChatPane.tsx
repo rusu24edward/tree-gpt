@@ -10,6 +10,7 @@ type Props = {
   onDeleteNode?: () => void;
   isDeleteDisabled?: boolean;
   showEmptyOverlay?: boolean;
+  onEnsureTree?: () => Promise<string | null>;
 };
 
 export default function ChatPane({
@@ -20,6 +21,7 @@ export default function ChatPane({
   onDeleteNode,
   isDeleteDisabled,
   showEmptyOverlay,
+  onEnsureTree,
 }: Props) {
   const [path, setPath] = useState<PathResponse['path']>([]);
   const [input, setInput] = useState('');
@@ -44,13 +46,20 @@ export default function ChatPane({
   }, [effectiveNodeId]);
 
   async function send() {
-    if (!treeId || input.trim().length === 0) return;
+    if (input.trim().length === 0) return;
+
+    let targetTreeId = treeId;
+    if (!targetTreeId && onEnsureTree) {
+      targetTreeId = await onEnsureTree();
+    }
+    if (!targetTreeId) return;
+
     const parent = activeNodeId ?? defaultParentId ?? null;
 
     const res = await fetchJSON<any>(`/api/messages`, {
       method: 'POST',
       body: JSON.stringify({
-        tree_id: treeId,
+        tree_id: targetTreeId,
         parent_id: parent,
         content: input,
       }),
@@ -110,7 +119,7 @@ export default function ChatPane({
           rows={3}
         />
         <div className="composer-actions">
-          <button onClick={send} disabled={!treeId || input.trim().length === 0}>
+          <button onClick={send} disabled={input.trim().length === 0}>
             Send
           </button>
         </div>
