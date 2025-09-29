@@ -574,17 +574,16 @@ export default function Home() {
           display: grid;
           grid-template-rows: 72px 1fr 52px;
           height: 100vh;
-          background: radial-gradient(circle at top left, #030712 0%, #0b1120 55%, #111c2e 100%);
-          color: #e2e8f0;
+          background: #343541;
+          color: #ececf1;
         }
         header {
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 0 32px;
-          background: rgba(15, 23, 42, 0.82);
-          backdrop-filter: blur(16px);
-          border-bottom: 1px solid #1f2937;
+          background: #343541;
+          border-bottom: 1px solid #565869;
         }
         .title {
           display: flex;
@@ -594,11 +593,11 @@ export default function Home() {
         .title span {
           font-size: 18px;
           font-weight: 700;
-          color: #f8fafc;
+          color: #ececf1;
         }
         .title small {
           font-size: 12px;
-          color: #94a3b8;
+          color: #8e8ea0;
         }
         .header-actions {
           display: flex;
@@ -606,24 +605,22 @@ export default function Home() {
         }
         button {
           border-radius: 999px;
-          border: 1px solid #4654d5;
-          background: linear-gradient(135deg, #4c6ef5, #6366f1);
-          color: #f8fafc;
+          border: 1px solid #10a37f;
+          background: #10a37f;
+          color: #ffffff;
           padding: 8px 20px;
           font-weight: 600;
           font-size: 13px;
-          box-shadow: 0 16px 32px rgba(76, 102, 245, 0.35);
-          transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+          box-shadow: none;
+          transition: background 0.18s ease, border 0.18s ease, opacity 0.18s ease;
         }
         button:hover:enabled {
-          transform: translateY(-1px);
-          box-shadow: 0 22px 40px rgba(76, 102, 245, 0.45);
+          background: #14b381;
+          border-color: #14b381;
         }
         button:disabled {
           opacity: 0.5;
           cursor: not-allowed;
-          box-shadow: none;
-          transform: none;
         }
         main {
           display: grid;
@@ -637,9 +634,9 @@ export default function Home() {
         .graph,
         .chat {
           border-radius: 28px;
-          background: rgba(17, 28, 46, 0.92);
-          border: 1px solid #1f2937;
-          box-shadow: 0 32px 60px rgba(3, 7, 18, 0.65);
+          background: #202123;
+          border: 1px solid #3f3f4b;
+          box-shadow: none;
           min-height: 0;
           overflow: hidden;
         }
@@ -653,15 +650,14 @@ export default function Home() {
           justify-content: space-between;
           padding: 20px 22px 12px;
           font-weight: 600;
-          color: #dbeafe;
+          color: #ececf1;
         }
         .trees-header button {
           padding: 6px 16px;
           font-size: 12px;
-          border: 1px solid #3f4cc9;
-          background: rgba(79, 70, 229, 0.2);
-          color: #e0e7ff;
-          box-shadow: none;
+          border: 1px solid #565869;
+          background: #40414f;
+          color: #ececf1;
         }
         .tree-list {
           flex: 1;
@@ -677,22 +673,19 @@ export default function Home() {
           flex-direction: column;
           gap: 12px;
           text-align: left;
-          border: 1px solid #23304a;
+          border: 1px solid #565869;
           padding: 16px;
           border-radius: 18px;
-          background: linear-gradient(135deg, rgba(29, 44, 73, 0.92), rgba(21, 32, 54, 0.92));
-          color: #e2e8f0;
-          box-shadow: 0 24px 48px rgba(3, 7, 18, 0.55);
-          transition: border 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+          background: #2f3038;
+          color: #ececf1;
+          transition: border 0.18s ease, background 0.18s ease;
         }
         .tree-item:hover:not(.active) {
-          transform: translateY(-1px);
-          box-shadow: 0 28px 56px rgba(3, 7, 18, 0.65);
+          background: #343541;
         }
         .tree-item.active {
-          border-color: #6366f1;
-          background: linear-gradient(135deg, rgba(79, 70, 229, 0.4), rgba(59, 130, 246, 0.28));
-          box-shadow: 0 32px 60px rgba(76, 102, 245, 0.35);
+          border-color: #10a37f;
+          background: #343541;
         }
         .tree-item-top {
           position: relative;
@@ -734,27 +727,24 @@ export default function Home() {
           width: 32px;
           height: 32px;
           border-radius: 10px;
-          border: 1px solid rgba(99, 102, 241, 0.4);
-          background: rgba(79, 70, 229, 0.2);
-          color: #e2e8f0;
+          border: 1px solid #565869;
+          background: #202123;
+          color: #ececf1;
           font-size: 16px;
-          box-shadow: none;
-          transition: transform 0.18s ease, box-shadow 0.18s ease;
+          transition: background 0.18s ease, border 0.18s ease, opacity 0.18s ease;
         }
         .icon-button:hover:enabled {
-          transform: translateY(-1px);
-          box-shadow: 0 16px 28px rgba(76, 102, 245, 0.25);
+          background: #343541;
+          border-color: #565869;
         }
         .icon-button:disabled {
           opacity: 0.5;
           cursor: not-allowed;
-          box-shadow: none;
-          transform: none;
         }
         .icon-button.danger {
-          border-color: #7f1d1d;
-          background: rgba(127, 29, 29, 0.35);
-          color: #fca5a5;
+          border-color: #ef4146;
+          color: #ef4146;
+          background: transparent;
         }
         .tree-title {
           display: block;
@@ -766,27 +756,26 @@ export default function Home() {
         }
         .tree-item-edit-actions button {
           border-radius: 999px;
-          border: 1px solid #3f4cc9;
-          background: rgba(79, 70, 229, 0.18);
-          color: #e0e7ff;
+          border: 1px solid #565869;
+          background: #40414f;
+          color: #ececf1;
           padding: 6px 14px;
           font-size: 12px;
           box-shadow: none;
-          transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
         }
         .tree-item-edit-actions button:hover:enabled {
-          transform: translateY(-1px);
-          box-shadow: 0 14px 28px rgba(76, 102, 245, 0.25);
+          background: #4f5160;
+          border-color: #4f5160;
         }
         .tree-item-edit-actions .danger {
-          background: rgba(127, 29, 29, 0.45);
-          border-color: #b91c1c;
-          color: #fecaca;
+          background: #ef4146;
+          border-color: #ef4146;
+          color: #ffffff;
         }
         .tree-item-edit-actions .secondary {
-          background: rgba(100, 116, 139, 0.25);
-          border-color: rgba(100, 116, 139, 0.55);
-          color: #cbd5f5;
+          background: #40414f;
+          border-color: #565869;
+          color: #ececf1;
         }
         .tree-item-edit {
           display: flex;
@@ -800,12 +789,11 @@ export default function Home() {
         }
         .tree-item-edit input {
           border-radius: 12px;
-          border: 1px solid #273349;
+          border: 1px solid #565869;
           padding: 12px;
           font-size: 13px;
-          background: #0b1424;
-          color: #f8fafc;
-          box-shadow: inset 0 2px 6px rgba(8, 12, 24, 0.35);
+          background: #40414f;
+          color: #ececf1;
         }
         .tree-item-edit input:disabled {
           opacity: 0.6;
@@ -814,14 +802,15 @@ export default function Home() {
         .hint {
           padding: 14px;
           border-radius: 16px;
-          background: rgba(30, 41, 59, 0.76);
-          color: #cbd5f5;
+          background: #202123;
+          color: #c5c5d2;
           font-size: 13px;
+          border: 1px solid #3f3f4b;
         }
         .graph {
           position: relative;
           display: flex;
-          background: linear-gradient(180deg, rgba(9, 13, 24, 0.95), rgba(17, 28, 46, 0.92));
+          background: #202123;
           overflow: hidden;
         }
         .graph > div {
@@ -835,24 +824,24 @@ export default function Home() {
           padding: 6px 14px;
           font-size: 12px;
           border-radius: 999px;
-          border: 1px solid #3f4cc9;
-          background: rgba(79, 70, 229, 0.24);
-          color: #e0e7ff;
+          border: 1px solid #565869;
+          background: #40414f;
+          color: #ececf1;
           box-shadow: none;
         }
         .graph-toggle:hover:enabled {
-          transform: none;
-          box-shadow: 0 12px 24px rgba(79, 70, 229, 0.22);
+          background: #4f5160;
+          border-color: #4f5160;
         }
         .graph-toggle:focus-visible {
-          outline: 2px solid #c4b5fd;
+          outline: 2px solid #10a37f;
           outline-offset: 2px;
         }
         .graph .empty {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #94a3b8;
+          color: #8e8ea0;
           font-size: 14px;
         }
         .graph-overlay {
@@ -871,9 +860,9 @@ export default function Home() {
           flex-direction: column;
           width: 100%;
           border-radius: 28px;
-          border: 1px solid #1f2937;
-          background: rgba(15, 23, 42, 0.96);
-          box-shadow: 0 40px 80px rgba(3, 7, 18, 0.75);
+          border: 1px solid #565869;
+          background: rgba(32, 33, 35, 0.96);
+          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
           overflow: hidden;
         }
         .graph-overlay-header {
@@ -881,10 +870,10 @@ export default function Home() {
           align-items: center;
           gap: 16px;
           padding: 18px 22px;
-          border-bottom: 1px solid #1f2937;
-          color: #f8fafc;
+          border-bottom: 1px solid #565869;
+          color: #ececf1;
           font-size: 14px;
-          background: rgba(17, 28, 46, 0.95);
+          background: #202123;
         }
         .graph-overlay-title {
           font-weight: 600;
@@ -897,24 +886,24 @@ export default function Home() {
         .overlay-action {
           padding: 6px 16px;
           border-radius: 999px;
-          border: 1px solid #3b82f6;
-          background: linear-gradient(135deg, #1e3a8a, #2563eb);
-          color: #e0f2ff;
+          border: 1px solid #10a37f;
+          background: #10a37f;
+          color: #ffffff;
           font-size: 12px;
           font-weight: 600;
           box-shadow: none;
         }
         .overlay-action.danger {
-          border-color: #dc2626;
-          background: linear-gradient(135deg, #7f1d1d, #b91c1c);
-          color: #fee2e2;
+          border-color: #ef4146;
+          background: #ef4146;
+          color: #ffffff;
         }
         .overlay-action:hover:enabled {
-          transform: none;
-          box-shadow: 0 16px 28px rgba(37, 99, 235, 0.25);
+          background: #14b381;
+          border-color: #14b381;
         }
         .overlay-action:focus-visible {
-          outline: 2px solid #c4b5fd;
+          outline: 2px solid #10a37f;
           outline-offset: 2px;
         }
         .graph-overlay-content {
@@ -925,9 +914,9 @@ export default function Home() {
           padding: 6px 14px;
           font-size: 12px;
           border-radius: 999px;
-          border: 1px solid #3f4cc9;
-          background: rgba(79, 70, 229, 0.24);
-          color: #e0e7ff;
+          border: 1px solid #565869;
+          background: #40414f;
+          color: #ececf1;
           box-shadow: none;
           margin-left: auto;
         }
@@ -935,11 +924,11 @@ export default function Home() {
           margin-left: 12px;
         }
         .overlay-close:hover:enabled {
-          transform: none;
-          box-shadow: 0 12px 24px rgba(79, 70, 229, 0.22);
+          background: #4f5160;
+          border-color: #4f5160;
         }
         .overlay-close:focus-visible {
-          outline: 2px solid #c4b5fd;
+          outline: 2px solid #10a37f;
           outline-offset: 2px;
         }
         .chat {
@@ -951,11 +940,10 @@ export default function Home() {
           align-items: center;
           justify-content: center;
           padding: 0 32px;
-          background: rgba(15, 23, 42, 0.88);
-          border-top: 1px solid #1f2937;
-          color: #94a3b8;
+          background: #202123;
+          border-top: 1px solid #565869;
+          color: #8e8ea0;
           font-size: 12px;
-          backdrop-filter: blur(16px);
         }
       `}</style>
     </div>

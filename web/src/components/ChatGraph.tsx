@@ -133,10 +133,10 @@ function ChatGraphInner({
 
       const isSystem = n.role === 'system';
       const isUser = n.role === 'user';
-      const background = isSystem ? '#2f2413' : isUser ? '#1d2540' : '#16213b';
-      const borderColor = n.id === activeNodeId ? '#6366f1' : isSystem ? '#f59e0b' : isUser ? '#2f3b5d' : '#23304a';
-      const textColor = isSystem ? '#fef6d8' : '#e2e8f0';
-      const shadow = n.id === activeNodeId ? '0 24px 48px rgba(76, 102, 245, 0.35)' : '0 20px 40px rgba(3, 7, 18, 0.6)';
+      const background = isSystem ? '#3a382f' : isUser ? '#343541' : '#444654';
+      const borderColor = n.id === activeNodeId ? '#10a37f' : '#565869';
+      const textColor = '#ececf1';
+      const shadow = n.id === activeNodeId ? '0 0 0 1px #10a37f' : 'none';
 
       return {
         id: n.id,
@@ -144,7 +144,7 @@ function ChatGraphInner({
         position: positions[n.id] ?? { x: 0, y: 0 },
         draggable: false,
         style: {
-          border: n.id === activeNodeId ? '2px solid #6366f1' : `1px solid ${borderColor}`,
+          border: n.id === activeNodeId ? '2px solid #10a37f' : `1px solid ${borderColor}`,
           borderRadius: 16,
           padding: 14,
           background,
@@ -166,7 +166,7 @@ function ChatGraphInner({
       source: e.source,
       target: e.target,
       animated: false,
-      style: { stroke: '#cbd5f0', strokeWidth: 1.4 },
+      style: { stroke: '#6b6c7b', strokeWidth: 1.4 },
     }));
 
     setNodes(nextNodes);
@@ -391,20 +391,20 @@ function ChatGraphInner({
         maxZoom={1.5}
       >
         <MiniMap
-          style={{ background: '#0f172a', borderRadius: 12, border: '1px solid #1f2937', padding: 6 }}
+          style={{ background: '#202123', borderRadius: 12, border: '1px solid #565869', padding: 6 }}
           nodeColor={(n) => {
             const bg = n.style && typeof n.style === 'object' ? (n.style as any).background : null;
-            return typeof bg === 'string' ? bg : '#1f2a44';
+            return typeof bg === 'string' ? bg : '#444654';
           }}
-          nodeStrokeColor={() => '#6366f1'}
+          nodeStrokeColor={() => '#10a37f'}
           nodeBorderRadius={12}
         />
         <Controls
-          style={{ background: 'rgba(15, 23, 42, 0.92)', borderRadius: 12, border: '1px solid #1f2937', color: '#e2e8f0' }}
+          style={{ background: 'rgba(32, 33, 35, 0.92)', borderRadius: 12, border: '1px solid #565869', color: '#ececf1' }}
           onInteractiveChange={(next) => setIsInteractive(next)}
           showInteractive
         />
-        <Background color="#27364d" gap={24} />
+        <Background color="#565869" gap={24} />
       </ReactFlow>
 
       {shouldRenderInlineActions && (
@@ -413,25 +413,25 @@ function ChatGraphInner({
             position: 'absolute',
             right: 16,
             top: 16,
-            background: 'rgba(15, 23, 42, 0.9)',
-            boxShadow: '0 20px 40px rgba(3, 7, 18, 0.55)',
+            background: 'rgba(32, 33, 35, 0.95)',
+            boxShadow: '0 18px 36px rgba(0, 0, 0, 0.45)',
             borderRadius: 12,
             padding: '12px 16px',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'stretch',
             gap: 10,
-            border: '1px solid #1f2937',
+            border: '1px solid #565869',
           }}
         >
-          <span style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600 }}>Branch actions</span>
+          <span style={{ fontSize: 13, color: '#ececf1', fontWeight: 600 }}>Branch actions</span>
           {canFork && onForkActive && (
             <button
               onClick={onForkActive}
               style={{
-                background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
-                border: '1px solid #3b82f6',
-                color: '#e0f2ff',
+                background: '#10a37f',
+                border: '1px solid #10a37f',
+                color: '#ffffff',
                 borderRadius: 999,
                 padding: '6px 12px',
                 fontWeight: 600,
@@ -444,9 +444,9 @@ function ChatGraphInner({
             <button
               onClick={onDeleteActive}
               style={{
-                background: 'linear-gradient(135deg, #7f1d1d, #b91c1c)',
-                border: '1px solid #dc2626',
-                color: '#fee2e2',
+                background: '#ef4146',
+                border: '1px solid #ef4146',
+                color: '#ffffff',
                 borderRadius: 999,
                 padding: '6px 12px',
                 fontWeight: 600,
