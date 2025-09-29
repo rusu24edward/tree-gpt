@@ -11,6 +11,7 @@ type Props = {
   isDeleteDisabled?: boolean;
   showEmptyOverlay?: boolean;
   onEnsureTree?: () => Promise<string | null>;
+  deleteLabel?: string;
 };
 
 export default function ChatPane({
@@ -22,6 +23,7 @@ export default function ChatPane({
   isDeleteDisabled,
   showEmptyOverlay,
   onEnsureTree,
+  deleteLabel = 'Delete branch',
 }: Props) {
   const [path, setPath] = useState<PathResponse['path']>([]);
   const [input, setInput] = useState('');
@@ -86,7 +88,7 @@ export default function ChatPane({
         </div>
         {onDeleteNode && (
           <button className="danger" onClick={onDeleteNode} disabled={Boolean(isDeleteDisabled)}>
-            Delete branch
+            {deleteLabel}
           </button>
         )}
       </div>

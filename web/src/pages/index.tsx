@@ -22,6 +22,7 @@ export default function Home() {
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
   const activeNode = useMemo(() => graph.nodes.find((n) => n.id === activeNodeId) ?? null, [graph, activeNodeId]);
   const isEmptyConversation = Boolean(activeTreeId) && !hasMessages;
+  const deleteLabel = activeNode && !activeNode.parent_id ? 'Delete conversation' : 'Delete branch';
 
   const ensureInitialTree = useCallback(async () => {
     setIsLoadingTrees(true);
@@ -203,13 +204,17 @@ export default function Home() {
   );
 
   const handleDeleteActive = useCallback(async () => {
-    if (!activeTreeId || !activeNodeId) return;
-    if (!activeNode || !activeNode.parent_id) return;
+    if (!activeTreeId || !activeNodeId || !activeNode) return;
+
+    if (!activeNode.parent_id) {
+      await handleDeleteTree(activeTreeId);
+      return;
+    }
 
     await fetchJSON(`/api/messages/${activeNodeId}`, { method: 'DELETE' });
     setActiveNodeId(activeNode.parent_id);
     await refreshGraph(activeTreeId);
-  }, [activeTreeId, activeNodeId, activeNode, refreshGraph]);
+  }, [activeTreeId, activeNodeId, activeNode, handleDeleteTree, refreshGraph]);
 
   const handleAfterSend = useCallback(
     (newAssistantId: string) => {
@@ -407,6 +412,7 @@ export default function Home() {
               onSelectNode={setActiveNodeId}
               activeNodeId={activeNodeId}
               onDeleteActive={handleDeleteActive}
+              deleteLabel={deleteLabel}
             />
           ) : (
             <div className="empty">Create or select a conversation to see the graph.</div>
@@ -420,9 +426,10 @@ export default function Home() {
             defaultParentId={rootId}
             onAfterSend={handleAfterSend}
             onDeleteNode={handleDeleteActive}
-            isDeleteDisabled={!activeNode || !activeNode.parent_id}
+            isDeleteDisabled={!activeNode}
             showEmptyOverlay={isEmptyConversation}
             onEnsureTree={ensureActiveTree}
+            deleteLabel={deleteLabel}
           />
         </div>
       </main>

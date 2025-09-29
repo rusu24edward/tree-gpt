@@ -20,6 +20,7 @@ type Props = {
   focusNodeId?: string | null;
   focusAncestors?: string[];
   onDeleteActive?: () => void;
+  deleteLabel?: string;
 };
 
 const NODE_HORIZONTAL_GAP = 260;
@@ -91,7 +92,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive }: Props) {
+function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive, deleteLabel }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const initialViewDone = useRef(false);
   const lastAddedId = useRef<string | null>(null);
@@ -340,11 +341,18 @@ function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive }: Pr
     return () => cancelAnimationFrame(raf);
   }, [parentById, nodes, reactFlow]);
 
+  const activeNode = useMemo(() => data.nodes.find((n) => n.id === activeNodeId) ?? null, [data.nodes, activeNodeId]);
+
   const canDelete = useMemo(() => {
     if (!activeNodeId || !onDeleteActive) return false;
-    const target = data.nodes.find((n) => n.id === activeNodeId);
-    return Boolean(target && target.parent_id);
-  }, [activeNodeId, onDeleteActive, data.nodes]);
+    return Boolean(activeNode);
+  }, [activeNodeId, activeNode, onDeleteActive]);
+
+  const deleteLabelResolved = useMemo(() => {
+    if (deleteLabel) return deleteLabel;
+    if (activeNode && !activeNode.parent_id) return 'Delete conversation';
+    return 'Delete branch';
+  }, [activeNode, deleteLabel]);
 
   return (
     <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -404,7 +412,7 @@ function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive }: Pr
               fontWeight: 600,
             }}
           >
-            Delete branch
+            {deleteLabelResolved}
           </button>
         </div>
       )}
