@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -106,6 +106,7 @@ function ChatGraphInner({
   const lastAddedId = useRef<string | null>(null);
   const prevNodeIds = useRef<Set<string>>(new Set());
   const reactFlow = useReactFlow();
+  const [isInteractive, setIsInteractive] = useState(true);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
@@ -375,10 +376,11 @@ function ChatGraphInner({
         nodesConnectable={false}
         edgesUpdatable={false}
         selectNodesOnDrag={false}
-        panOnDrag
+        panOnDrag={isInteractive}
         panOnScroll={false}
-        zoomOnScroll
-        zoomOnPinch
+        zoomOnScroll={isInteractive}
+        zoomOnPinch={isInteractive}
+        zoomOnDoubleClick={isInteractive}
         fitView={false}
         minZoom={0.25}
         maxZoom={1.5}
@@ -389,7 +391,11 @@ function ChatGraphInner({
           nodeStrokeColor={() => '#94a3b8'}
           nodeBorderRadius={12}
         />
-        <Controls style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #d0d7e2' }} />
+        <Controls
+          style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #d0d7e2' }}
+          onInteractiveChange={(next) => setIsInteractive(next)}
+          showInteractive
+        />
         <Background color="#dbe4ff" gap={24} />
       </ReactFlow>
 
