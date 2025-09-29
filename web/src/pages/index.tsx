@@ -17,6 +17,7 @@ export default function Home() {
   const [editingTitle, setEditingTitle] = useState('');
   const [pendingTreeId, setPendingTreeId] = useState<string | null>(null);
   const [blankTreeId, setBlankTreeId] = useState<string | null>(null);
+  const [composerFocusToken, setComposerFocusToken] = useState(0);
   const pendingFocusNodeIdRef = useRef<string | null>(null);
 
   const hasMessages = graph.nodes.length > 0;
@@ -45,8 +46,14 @@ export default function Home() {
     ensureInitialTree();
   }, [ensureInitialTree]);
 
+  type RefreshOptions = {
+    selectRoot?: boolean;
+    focusNodeId?: string | null;
+    focusComposer?: boolean;
+  };
+
   const refreshGraph = useCallback(
-    async (treeId: string, opts?: { selectRoot?: boolean; focusNodeId?: string | null }) => {
+    async (treeId: string, opts?: RefreshOptions) => {
       setIsSyncingGraph(true);
       try {
         const data = await fetchJSON<GraphResponse>(`/api/messages/graph/${treeId}`);
@@ -54,6 +61,7 @@ export default function Home() {
         const root = data.nodes.find((n) => !n.parent_id)?.id ?? null;
         const focusId = opts?.focusNodeId ?? null;
         const shouldSelectRoot = Boolean(opts?.selectRoot);
+        const shouldFocusComposer = opts?.focusComposer ?? false;
 
         setActiveNodeId((prev) => {
           if (focusId && data.nodes.some((n) => n.id === focusId)) {
@@ -72,6 +80,10 @@ export default function Home() {
           setBlankTreeId(null);
         }
 
+        if (shouldFocusComposer) {
+          setComposerFocusToken((prev) => prev + 1);
+        }
+
         return data;
       } finally {
         setIsSyncingGraph(false);
@@ -87,7 +99,7 @@ export default function Home() {
       return;
     }
     const focusId = pendingFocusNodeIdRef.current;
-    const opts = focusId ? { focusNodeId: focusId } : { selectRoot: true };
+    const opts = focusId ? { focusNodeId: focusId } : { selectRoot: true, focusComposer: true };
     pendingFocusNodeIdRef.current = null;
     void refreshGraph(activeTreeId, opts);
   }, [activeTreeId, refreshGraph]);
@@ -104,6 +116,7 @@ export default function Home() {
       setActiveNodeId(null);
       setActiveTreeId(newTree.id);
       setBlankTreeId(newTree.id);
+      setComposerFocusToken((prev) => prev + 1);
     } finally {
       setIsLoadingTrees(false);
     }
@@ -132,6 +145,7 @@ export default function Home() {
       }
       setActiveNodeId(null);
       setActiveTreeId(treeId);
+      setComposerFocusToken((prev) => prev + 1);
     },
     [activeTreeId, blankTreeId, editingTreeId, isEmptyConversation]
   );
@@ -458,6 +472,7 @@ export default function Home() {
             showEmptyOverlay={isEmptyConversation}
             onEnsureTree={ensureActiveTree}
             deleteLabel={deleteLabel}
+            focusComposerToken={composerFocusToken}
           />
         </div>
       </main>

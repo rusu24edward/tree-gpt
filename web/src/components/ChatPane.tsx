@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { PathResponse } from '../lib/api';
 import { fetchJSON } from '../lib/api';
 
@@ -12,6 +12,7 @@ type Props = {
   showEmptyOverlay?: boolean;
   onEnsureTree?: () => Promise<string | null>;
   deleteLabel?: string;
+  focusComposerToken?: number;
 };
 
 export default function ChatPane({
@@ -24,9 +25,11 @@ export default function ChatPane({
   showEmptyOverlay,
   onEnsureTree,
   deleteLabel = 'Delete branch',
+  focusComposerToken,
 }: Props) {
   const [path, setPath] = useState<PathResponse['path']>([]);
   const [input, setInput] = useState('');
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const effectiveNodeId = useMemo(
     () => activeNodeId ?? defaultParentId ?? null,
@@ -46,6 +49,16 @@ export default function ChatPane({
     }
     load();
   }, [effectiveNodeId]);
+
+  useEffect(() => {
+    if (!focusComposerToken) return;
+    const node = composerRef.current;
+    if (!node) return;
+    requestAnimationFrame(() => {
+      node.focus();
+      node.setSelectionRange(node.value.length, node.value.length);
+    });
+  }, [focusComposerToken]);
 
   async function send() {
     if (input.trim().length === 0) return;
@@ -119,6 +132,7 @@ export default function ChatPane({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={3}
+          ref={composerRef}
         />
         <div className="composer-actions">
           <button onClick={send} disabled={input.trim().length === 0}>
