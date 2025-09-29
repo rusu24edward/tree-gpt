@@ -446,21 +446,6 @@ export default function Home() {
           </div>
         </aside>
 
-        <div className="graph">
-          {activeTreeId ? (
-            <ChatGraph
-              data={graph}
-              onSelectNode={setActiveNodeId}
-              activeNodeId={activeNodeId}
-              onDeleteActive={handleDeleteActive}
-              onForkActive={handleForkActive}
-              deleteLabel={deleteLabel}
-            />
-          ) : (
-            <div className="empty">Create or select a conversation to see the graph.</div>
-          )}
-        </div>
-
         <div className="chat">
           <ChatPane
             activeNodeId={activeNodeId}
@@ -474,6 +459,21 @@ export default function Home() {
             deleteLabel={deleteLabel}
             focusComposerToken={composerFocusToken}
           />
+        </div>
+
+        <div className="graph">
+          {activeTreeId ? (
+            <ChatGraph
+              data={graph}
+              onSelectNode={setActiveNodeId}
+              activeNodeId={activeNodeId}
+              onDeleteActive={handleDeleteActive}
+              onForkActive={handleForkActive}
+              deleteLabel={deleteLabel}
+            />
+          ) : (
+            <div className="empty">Create or select a conversation to see the graph.</div>
+          )}
         </div>
       </main>
 
@@ -539,7 +539,7 @@ export default function Home() {
         }
         main {
           display: grid;
-          grid-template-columns: 300px minmax(0, 1fr) 520px;
+          grid-template-columns: 300px minmax(0, 1fr) 460px;
           gap: 24px;
           padding: 28px 36px;
           min-height: 0;
