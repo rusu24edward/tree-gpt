@@ -160,6 +160,61 @@ def post_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
     )
     return asst
 
+@router.post("/branch/{message_id}/fork", response_model=schemas.BranchForkResponse)
+def fork_branch(message_id: UUID, db: Session = Depends(get_db)):
+    target = crud.get_message(db, message_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    lineage: List[models.Message] = []
+    current = target
+    while current:
+        lineage.append(current)
+        if current.parent_id is None:
+            break
+        current = crud.get_message(db, current.parent_id)
+        if current is None:
+            break
+
+    lineage.reverse()
+
+    source_tree = db.query(models.Tree).filter(models.Tree.id == target.tree_id).first()
+    base_title = source_tree.title if source_tree else None
+    branch_title = f"{base_title} (Branch)" if base_title else "Conversation branch"
+    new_tree = models.Tree(title=branch_title)
+    db.add(new_tree)
+    db.flush()
+
+    id_map: Dict[UUID, UUID] = {}
+    last_clone: Optional[models.Message] = None
+
+    try:
+        for msg in lineage:
+            parent_new_id = id_map.get(msg.parent_id) if msg.parent_id else None
+            clone = models.Message(
+                tree_id=new_tree.id,
+                parent_id=parent_new_id,
+                role=msg.role,
+                content=msg.content,
+                meta=msg.meta,
+            )
+            db.add(clone)
+            db.flush()
+            id_map[msg.id] = clone.id
+            if msg.id == target.id:
+                last_clone = clone
+
+        if not last_clone:
+            raise HTTPException(status_code=500, detail="Failed to copy branch")
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    db.refresh(new_tree)
+    return {"tree": new_tree, "active_node_id": str(last_clone.id)}
+
 @router.delete("/{message_id}")
 def delete_message(message_id: UUID, db: Session = Depends(get_db)):
     target = crud.get_message(db, message_id)

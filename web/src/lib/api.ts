@@ -25,3 +25,4 @@ export type GraphResponse = { nodes: GraphNode[]; edges: GraphEdge[] };
 export type TreeOut = { id: string; title?: string | null };
 export type PathMessage = { role: string; content: string };
 export type PathResponse = { path: PathMessage[] };
+export type BranchForkResponse = { tree: TreeOut; active_node_id: string };

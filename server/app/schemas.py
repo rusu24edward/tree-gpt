@@ -51,3 +51,7 @@ class PathMessage(BaseModel):
 
 class PathResponse(BaseModel):
     path: List[PathMessage]
+
+class BranchForkResponse(BaseModel):
+    tree: TreeOut
+    active_node_id: UUID

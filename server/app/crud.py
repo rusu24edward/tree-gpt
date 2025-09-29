@@ -31,8 +31,15 @@ def update_tree_title(db: Session, tree_id: UUID, title: Optional[str]) -> Optio
     db.refresh(tree)
     return tree
 
-def create_message(db: Session, tree_id: UUID, role: str, content: str, parent_id: Optional[UUID] = None) -> models.Message:
-    m = models.Message(tree_id=tree_id, role=role, content=content, parent_id=parent_id)
+def create_message(
+    db: Session,
+    tree_id: UUID,
+    role: str,
+    content: str,
+    parent_id: Optional[UUID] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> models.Message:
+    m = models.Message(tree_id=tree_id, role=role, content=content, parent_id=parent_id, meta=meta)
     db.add(m)
     db.commit()
     db.refresh(m)

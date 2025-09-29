@@ -21,6 +21,7 @@ type Props = {
   focusAncestors?: string[];
   onDeleteActive?: () => void;
   deleteLabel?: string;
+  onForkActive?: () => void;
 };
 
 const NODE_HORIZONTAL_GAP = 260;
@@ -92,7 +93,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive, deleteLabel }: Props) {
+function ChatGraphInner({
+  data,
+  onSelectNode,
+  activeNodeId,
+  onDeleteActive,
+  deleteLabel,
+  onForkActive,
+}: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const initialViewDone = useRef(false);
   const lastAddedId = useRef<string | null>(null);
@@ -343,16 +351,17 @@ function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive, dele
 
   const activeNode = useMemo(() => data.nodes.find((n) => n.id === activeNodeId) ?? null, [data.nodes, activeNodeId]);
 
-  const canDelete = useMemo(() => {
-    if (!activeNodeId || !onDeleteActive) return false;
-    return Boolean(activeNode);
-  }, [activeNodeId, activeNode, onDeleteActive]);
+  const canDelete = useMemo(() => Boolean(onDeleteActive && activeNode), [onDeleteActive, activeNode]);
+  const canFork = useMemo(() => Boolean(onForkActive && activeNode), [onForkActive, activeNode]);
+  const showActions = canDelete || canFork;
 
   const deleteLabelResolved = useMemo(() => {
     if (deleteLabel) return deleteLabel;
     if (activeNode && !activeNode.parent_id) return 'Delete conversation';
     return 'Delete branch';
   }, [activeNode, deleteLabel]);
+
+  const forkLabel = 'Create conversation from branch';
 
   return (
     <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -384,7 +393,7 @@ function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive, dele
         <Background color="#dbe4ff" gap={24} />
       </ReactFlow>
 
-      {canDelete && (
+      {showActions && (
         <div
           style={{
             position: 'absolute',
@@ -392,28 +401,46 @@ function ChatGraphInner({ data, onSelectNode, activeNodeId, onDeleteActive, dele
             top: 16,
             background: 'rgba(255, 255, 255, 0.9)',
             boxShadow: '0 12px 24px rgba(15, 23, 42, 0.12)',
-            borderRadius: 999,
-            padding: '6px 14px',
+            borderRadius: 12,
+            padding: '12px 16px',
             display: 'flex',
-            alignItems: 'center',
-            gap: 8,
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 10,
             border: '1px solid #d0d7e2',
           }}
         >
-          <span style={{ fontSize: 13, color: '#0f172a', fontWeight: 500 }}>Branch actions</span>
-          <button
-            onClick={onDeleteActive}
-            style={{
-              background: '#fee2e2',
-              border: '1px solid #fecaca',
-              color: '#b91c1c',
-              borderRadius: 999,
-              padding: '4px 10px',
-              fontWeight: 600,
-            }}
-          >
-            {deleteLabelResolved}
-          </button>
+          <span style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>Branch actions</span>
+          {canFork && onForkActive && (
+            <button
+              onClick={onForkActive}
+              style={{
+                background: '#e0f2fe',
+                border: '1px solid #bae6fd',
+                color: '#0369a1',
+                borderRadius: 999,
+                padding: '6px 12px',
+                fontWeight: 600,
+              }}
+            >
+              {forkLabel}
+            </button>
+          )}
+          {canDelete && onDeleteActive && (
+            <button
+              onClick={onDeleteActive}
+              style={{
+                background: '#fee2e2',
+                border: '1px solid #fecaca',
+                color: '#b91c1c',
+                borderRadius: 999,
+                padding: '6px 12px',
+                fontWeight: 600,
+              }}
+            >
+              {deleteLabelResolved}
+            </button>
+          )}
         </div>
       )}
     </div>

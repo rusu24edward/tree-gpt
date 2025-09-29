@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { fetchJSON, API_BASE } from '../lib/api';
-import type { GraphResponse, TreeOut } from '../lib/api';
+import type { GraphResponse, TreeOut, BranchForkResponse } from '../lib/api';
 
 const ChatGraph = dynamic(() => import('../components/ChatGraph'), { ssr: false });
 import ChatPane from '../components/ChatPane';
@@ -17,6 +17,7 @@ export default function Home() {
   const [editingTitle, setEditingTitle] = useState('');
   const [pendingTreeId, setPendingTreeId] = useState<string | null>(null);
   const [blankTreeId, setBlankTreeId] = useState<string | null>(null);
+  const pendingFocusNodeIdRef = useRef<string | null>(null);
 
   const hasMessages = graph.nodes.length > 0;
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
@@ -45,21 +46,25 @@ export default function Home() {
   }, [ensureInitialTree]);
 
   const refreshGraph = useCallback(
-    async (treeId: string, opts?: { selectRoot?: boolean }) => {
+    async (treeId: string, opts?: { selectRoot?: boolean; focusNodeId?: string | null }) => {
       setIsSyncingGraph(true);
       try {
         const data = await fetchJSON<GraphResponse>(`/api/messages/graph/${treeId}`);
         setGraph(data);
         const root = data.nodes.find((n) => !n.parent_id)?.id ?? null;
+        const focusId = opts?.focusNodeId ?? null;
+        const shouldSelectRoot = Boolean(opts?.selectRoot);
 
-        if (opts?.selectRoot) {
-          setActiveNodeId(root);
-        } else {
-          setActiveNodeId((prev) => {
-            if (!prev) return root;
-            return data.nodes.some((n) => n.id === prev) ? prev : root;
-          });
-        }
+        setActiveNodeId((prev) => {
+          if (focusId && data.nodes.some((n) => n.id === focusId)) {
+            return focusId;
+          }
+          if (shouldSelectRoot) {
+            return root;
+          }
+          if (!prev) return root;
+          return data.nodes.some((n) => n.id === prev) ? prev : root;
+        });
 
         if (data.nodes.length === 0) {
           setBlankTreeId(treeId);
@@ -81,7 +86,10 @@ export default function Home() {
       setActiveNodeId(null);
       return;
     }
-    refreshGraph(activeTreeId, { selectRoot: true });
+    const focusId = pendingFocusNodeIdRef.current;
+    const opts = focusId ? { focusNodeId: focusId } : { selectRoot: true };
+    pendingFocusNodeIdRef.current = null;
+    void refreshGraph(activeTreeId, opts);
   }, [activeTreeId, refreshGraph]);
 
   const handleCreateTree = useCallback(async () => {
@@ -228,6 +236,25 @@ export default function Home() {
     },
     [activeTreeId, blankTreeId, refreshGraph]
   );
+
+  const handleForkActive = useCallback(async () => {
+    if (!activeNodeId) return;
+    try {
+      const result = await fetchJSON<BranchForkResponse>(`/api/messages/branch/${activeNodeId}/fork`, {
+        method: 'POST',
+      });
+      setTrees((prev) => {
+        const filtered = prev.filter((t) => t.id !== result.tree.id);
+        return [result.tree, ...filtered];
+      });
+      pendingFocusNodeIdRef.current = result.active_node_id;
+      setActiveTreeId(result.tree.id);
+      setActiveNodeId(result.active_node_id);
+      setBlankTreeId((prev) => (prev === result.tree.id ? null : prev));
+    } catch (err) {
+      console.error('Failed to create conversation from branch', err);
+    }
+  }, [activeNodeId]);
 
   const renameInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -412,6 +439,7 @@ export default function Home() {
               onSelectNode={setActiveNodeId}
               activeNodeId={activeNodeId}
               onDeleteActive={handleDeleteActive}
+              onForkActive={handleForkActive}
               deleteLabel={deleteLabel}
             />
           ) : (
