@@ -18,13 +18,16 @@ export default function Home() {
   const [pendingTreeId, setPendingTreeId] = useState<string | null>(null);
   const [blankTreeId, setBlankTreeId] = useState<string | null>(null);
   const [composerFocusToken, setComposerFocusToken] = useState(0);
+  const [isGraphExpanded, setIsGraphExpanded] = useState(false);
   const pendingFocusNodeIdRef = useRef<string | null>(null);
+  const overlayCloseButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const hasMessages = graph.nodes.length > 0;
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
   const activeNode = useMemo(() => graph.nodes.find((n) => n.id === activeNodeId) ?? null, [graph, activeNodeId]);
   const isEmptyConversation = Boolean(activeTreeId) && !hasMessages;
   const deleteLabel = activeNode && !activeNode.parent_id ? 'Delete conversation' : 'Delete branch';
+  const forkLabel = 'Create conversation from branch';
 
   const ensureInitialTree = useCallback(async () => {
     setIsLoadingTrees(true);
@@ -146,6 +149,7 @@ export default function Home() {
       setActiveNodeId(null);
       setActiveTreeId(treeId);
       setComposerFocusToken((prev) => prev + 1);
+      setIsGraphExpanded(false);
     },
     [activeTreeId, blankTreeId, editingTreeId, isEmptyConversation]
   );
@@ -321,6 +325,38 @@ export default function Home() {
     }
   }, [editingTreeId]);
 
+  useEffect(() => {
+    if (isGraphExpanded && overlayCloseButtonRef.current) {
+      requestAnimationFrame(() => {
+        overlayCloseButtonRef.current?.focus();
+      });
+    }
+  }, [isGraphExpanded]);
+
+  useEffect(() => {
+    if (!activeTreeId) {
+      setIsGraphExpanded(false);
+    }
+  }, [activeTreeId]);
+
+  useEffect(() => {
+    if (!isGraphExpanded) return;
+    const handleKey = (evt: KeyboardEvent) => {
+      if (evt.key === 'Escape') {
+        setIsGraphExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isGraphExpanded]);
+
+  const toggleGraphExpanded = useCallback(() => {
+    setIsGraphExpanded((prev) => !prev);
+  }, []);
+
+  const canOverlayFork = Boolean(activeNode && handleForkActive);
+  const canOverlayDelete = Boolean(activeNode && handleDeleteActive);
+
   return (
     <div className="app">
       <header>
@@ -462,6 +498,14 @@ export default function Home() {
         </div>
 
         <div className="graph">
+          <button
+            type="button"
+            className="graph-toggle"
+            onClick={toggleGraphExpanded}
+            aria-expanded={isGraphExpanded}
+          >
+            {isGraphExpanded ? 'Close graph' : 'Expand graph'}
+          </button>
           {activeTreeId ? (
             <ChatGraph
               data={graph}
@@ -470,12 +514,56 @@ export default function Home() {
               onDeleteActive={handleDeleteActive}
               onForkActive={handleForkActive}
               deleteLabel={deleteLabel}
+              showInlineActions={!isGraphExpanded}
             />
           ) : (
             <div className="empty">Create or select a conversation to see the graph.</div>
           )}
         </div>
       </main>
+
+      {isGraphExpanded && (
+        <div className="graph-overlay" role="dialog" aria-modal="true" aria-label="Expanded conversation graph">
+          <div className="graph-overlay-inner">
+            <div className="graph-overlay-header">
+              <span className="graph-overlay-title">Conversation graph</span>
+              {(canOverlayFork || canOverlayDelete) && (
+                <div className="graph-overlay-actions">
+                  {canOverlayFork && (
+                    <button type="button" className="overlay-action" onClick={handleForkActive}>
+                      {forkLabel}
+                    </button>
+                  )}
+                  {canOverlayDelete && (
+                    <button type="button" className="overlay-action danger" onClick={handleDeleteActive}>
+                      {deleteLabel}
+                    </button>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                className="overlay-close"
+                onClick={toggleGraphExpanded}
+                ref={overlayCloseButtonRef}
+              >
+                Collapse graph
+              </button>
+            </div>
+            <div className="graph-overlay-content">
+              <ChatGraph
+                data={graph}
+                onSelectNode={setActiveNodeId}
+                activeNodeId={activeNodeId}
+                onDeleteActive={handleDeleteActive}
+                onForkActive={handleForkActive}
+                deleteLabel={deleteLabel}
+                showInlineActions={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer>
         <span>Branching Chat — manage multiple conversation trees.</span>
@@ -543,6 +631,7 @@ export default function Home() {
           gap: 24px;
           padding: 28px 36px;
           min-height: 0;
+          position: relative;
         }
         aside.trees,
         .graph,
@@ -733,9 +822,31 @@ export default function Home() {
           position: relative;
           display: flex;
           background: linear-gradient(180deg, rgba(9, 13, 24, 0.95), rgba(17, 28, 46, 0.92));
+          overflow: hidden;
         }
         .graph > div {
           flex: 1;
+        }
+        .graph-toggle {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          z-index: 2;
+          padding: 6px 14px;
+          font-size: 12px;
+          border-radius: 999px;
+          border: 1px solid #3f4cc9;
+          background: rgba(79, 70, 229, 0.24);
+          color: #e0e7ff;
+          box-shadow: none;
+        }
+        .graph-toggle:hover:enabled {
+          transform: none;
+          box-shadow: 0 12px 24px rgba(79, 70, 229, 0.22);
+        }
+        .graph-toggle:focus-visible {
+          outline: 2px solid #c4b5fd;
+          outline-offset: 2px;
         }
         .graph .empty {
           display: flex;
@@ -743,6 +854,93 @@ export default function Home() {
           justify-content: center;
           color: #94a3b8;
           font-size: 14px;
+        }
+        .graph-overlay {
+          position: absolute;
+          top: 28px;
+          bottom: 28px;
+          left: calc(36px + 300px + 24px);
+          right: 36px;
+          z-index: 40;
+          display: flex;
+          align-items: stretch;
+          justify-content: stretch;
+        }
+        .graph-overlay-inner {
+          display: flex;
+          flex-direction: column;
+          width: 100%;
+          border-radius: 28px;
+          border: 1px solid #1f2937;
+          background: rgba(15, 23, 42, 0.96);
+          box-shadow: 0 40px 80px rgba(3, 7, 18, 0.75);
+          overflow: hidden;
+        }
+        .graph-overlay-header {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 18px 22px;
+          border-bottom: 1px solid #1f2937;
+          color: #f8fafc;
+          font-size: 14px;
+          background: rgba(17, 28, 46, 0.95);
+        }
+        .graph-overlay-title {
+          font-weight: 600;
+        }
+        .graph-overlay-actions {
+          display: flex;
+          gap: 12px;
+          margin-left: auto;
+        }
+        .overlay-action {
+          padding: 6px 16px;
+          border-radius: 999px;
+          border: 1px solid #3b82f6;
+          background: linear-gradient(135deg, #1e3a8a, #2563eb);
+          color: #e0f2ff;
+          font-size: 12px;
+          font-weight: 600;
+          box-shadow: none;
+        }
+        .overlay-action.danger {
+          border-color: #dc2626;
+          background: linear-gradient(135deg, #7f1d1d, #b91c1c);
+          color: #fee2e2;
+        }
+        .overlay-action:hover:enabled {
+          transform: none;
+          box-shadow: 0 16px 28px rgba(37, 99, 235, 0.25);
+        }
+        .overlay-action:focus-visible {
+          outline: 2px solid #c4b5fd;
+          outline-offset: 2px;
+        }
+        .graph-overlay-content {
+          flex: 1;
+          min-height: 0;
+        }
+        .overlay-close {
+          padding: 6px 14px;
+          font-size: 12px;
+          border-radius: 999px;
+          border: 1px solid #3f4cc9;
+          background: rgba(79, 70, 229, 0.24);
+          color: #e0e7ff;
+          box-shadow: none;
+          margin-left: auto;
+        }
+        .graph-overlay-actions + .overlay-close {
+          margin-left: 12px;
+        }
+        .overlay-close:hover:enabled {
+          transform: none;
+          box-shadow: 0 12px 24px rgba(79, 70, 229, 0.22);
+        }
+        .overlay-close:focus-visible {
+          outline: 2px solid #c4b5fd;
+          outline-offset: 2px;
         }
         .chat {
           display: flex;

@@ -22,6 +22,7 @@ type Props = {
   onDeleteActive?: () => void;
   deleteLabel?: string;
   onForkActive?: () => void;
+  showInlineActions?: boolean;
 };
 
 const NODE_HORIZONTAL_GAP = 260;
@@ -100,6 +101,7 @@ function ChatGraphInner({
   onDeleteActive,
   deleteLabel,
   onForkActive,
+  showInlineActions,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const initialViewDone = useRef(false);
@@ -357,6 +359,7 @@ function ChatGraphInner({
   const canDelete = useMemo(() => Boolean(onDeleteActive && activeNode), [onDeleteActive, activeNode]);
   const canFork = useMemo(() => Boolean(onForkActive && activeNode), [onForkActive, activeNode]);
   const showActions = canDelete || canFork;
+  const shouldRenderInlineActions = showInlineActions !== false && showActions;
 
   const deleteLabelResolved = useMemo(() => {
     if (deleteLabel) return deleteLabel;
@@ -404,7 +407,7 @@ function ChatGraphInner({
         <Background color="#27364d" gap={24} />
       </ReactFlow>
 
-      {showActions && (
+      {shouldRenderInlineActions && (
         <div
           style={{
             position: 'absolute',
