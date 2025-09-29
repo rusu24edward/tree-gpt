@@ -221,6 +221,7 @@ export default function ChatPane({
           border: 1px solid #cbd5e1;
           border-radius: 16px;
           padding: 16px;
+          box-sizing: border-box;
           resize: vertical;
           font-size: 14px;
           line-height: 1.5;
