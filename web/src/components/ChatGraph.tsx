@@ -30,39 +30,96 @@ const NODE_VERTICAL_GAP = 160;
 const VIEW_PADDING_X = 120;
 const VIEW_PADDING_Y = 200;
 const NODE_FALLBACK_WIDTH = 220;
-const NODE_FALLBACK_HEIGHT = 80;
+const NODE_FALLBACK_HEIGHT = 120;
 
 function layoutNodes(data: GraphResponse): Record<string, { x: number; y: number }> {
   const childrenMap = new Map<string, string[]>();
-  const hasParent = new Set<string>();
-  data.nodes.forEach((n) => childrenMap.set(n.id, []));
-  data.edges.forEach((e) => {
-    childrenMap.get(e.source)?.push(e.target);
-    hasParent.add(e.target);
+  const parentMap = new Map<string, string | null>();
+  data.nodes.forEach((n) => {
+    childrenMap.set(n.id, []);
+    parentMap.set(n.id, n.parent_id ?? null);
   });
-  const roots = data.nodes.filter((n) => !hasParent.has(n.id)).map((n) => n.id);
+  data.edges.forEach((edge) => {
+    childrenMap.get(edge.source)?.push(edge.target);
+    parentMap.set(edge.target, edge.source);
+  });
 
-  const pos: Record<string, { x: number; y: number }> = {};
-  let queue: Array<{ id: string; depth: number }> = roots.map((id) => ({ id, depth: 0 }));
-  const layerIndex = new Map<number, number>();
+  const roots = data.nodes
+    .filter((node) => {
+      const parentId = parentMap.get(node.id);
+      return !parentId || !parentMap.has(parentId);
+    })
+    .map((node) => node.id);
 
-  while (queue.length) {
-    const { id, depth } = queue.shift()!;
-    const idx = layerIndex.get(depth) ?? 0;
-    pos[id] = { x: idx * NODE_HORIZONTAL_GAP, y: depth * NODE_VERTICAL_GAP };
-    layerIndex.set(depth, idx + 1);
+  const widthById = new Map<string, number>();
+  const computeWidth = (id: string): number => {
+    const cached = widthById.get(id);
+    if (cached) return cached;
+    const children = childrenMap.get(id) ?? [];
+    if (children.length === 0) {
+      widthById.set(id, 1);
+      return 1;
+    }
+    const primaryChild = children[0];
+    const primaryWidth = primaryChild ? computeWidth(primaryChild) : 0;
+    let extraWidth = 0;
+    for (let i = 1; i < children.length; i += 1) {
+      extraWidth += computeWidth(children[i]);
+    }
+    const totalWidth = Math.max(1, primaryWidth + extraWidth);
+    widthById.set(id, totalWidth);
+    return totalWidth;
+  };
 
-    const kids = childrenMap.get(id) ?? [];
-    kids.forEach((kid) => queue.push({ id: kid, depth: depth + 1 }));
-  }
+  data.nodes.forEach((node) => {
+    computeWidth(node.id);
+  });
 
-  if (Object.keys(pos).length === 0) {
-    data.nodes.forEach((n, i) => {
-      pos[n.id] = { x: (i % 4) * NODE_HORIZONTAL_GAP, y: Math.floor(i / 4) * NODE_VERTICAL_GAP };
-    });
-  }
+  const positions: Record<string, { x: number; y: number }> = {};
+  const visited = new Set<string>();
 
-  const entries = Object.values(pos);
+  const assign = (id: string, column: number, depth: number) => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    positions[id] = {
+      x: column * NODE_HORIZONTAL_GAP,
+      y: depth * NODE_VERTICAL_GAP,
+    };
+
+    const children = childrenMap.get(id) ?? [];
+    if (children.length === 0) return;
+
+    const primaryChild = children[0];
+    const primaryWidth = primaryChild ? computeWidth(primaryChild) : 0;
+    if (primaryChild) {
+      assign(primaryChild, column, depth + 1);
+    }
+
+    let nextColumn = column + Math.max(primaryWidth, 1);
+    for (let i = 1; i < children.length; i += 1) {
+      const childId = children[i];
+      assign(childId, nextColumn, depth + 1);
+      nextColumn += computeWidth(childId);
+    }
+  };
+
+  let columnCursor = 0;
+  roots.forEach((rootId) => {
+    if (visited.has(rootId)) return;
+    assign(rootId, columnCursor, 0);
+    columnCursor += Math.max(computeWidth(rootId), 1);
+  });
+
+  data.nodes.forEach((node) => {
+    if (positions[node.id]) return;
+    positions[node.id] = {
+      x: columnCursor * NODE_HORIZONTAL_GAP,
+      y: 0,
+    };
+    columnCursor += 1;
+  });
+
+  const entries = Object.values(positions);
   if (entries.length > 0) {
     const minX = Math.min(...entries.map((p) => p.x));
     const maxX = Math.max(...entries.map((p) => p.x));
@@ -71,15 +128,15 @@ function layoutNodes(data: GraphResponse): Record<string, { x: number; y: number
     const offsetX = (minX + maxX) / 2;
     const offsetY = (minY + maxY) / 2;
 
-    Object.keys(pos).forEach((id) => {
-      pos[id] = {
-        x: pos[id].x - offsetX,
-        y: pos[id].y - offsetY,
+    Object.keys(positions).forEach((nodeId) => {
+      positions[nodeId] = {
+        x: positions[nodeId].x - offsetX,
+        y: positions[nodeId].y - offsetY,
       };
     });
   }
 
-  return pos;
+  return positions;
 }
 
 function getNodeWorldPosition(node: Node): { x: number; y: number } {
@@ -153,7 +210,12 @@ function ChatGraphInner({
           fontWeight: 500,
           lineHeight: 1.45,
           boxShadow: shadow,
-          maxWidth: 280,
+          width: NODE_FALLBACK_WIDTH,
+          height: NODE_FALLBACK_HEIGHT,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-start',
+          alignItems: 'flex-start',
           overflow: 'hidden',
           whiteSpace: 'pre-wrap',
           textOverflow: 'ellipsis',
