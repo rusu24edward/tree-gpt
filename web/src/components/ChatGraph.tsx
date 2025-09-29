@@ -130,9 +130,11 @@ function ChatGraphInner({
       const label = lines.length > 0 ? lines.join('\n') : n.label;
 
       const isSystem = n.role === 'system';
-      const isPendingUser = n.role === 'user';
-      const background = isSystem ? '#fefce8' : isPendingUser ? '#f1f5ff' : '#ffffff';
-      const borderColor = n.id === activeNodeId ? '#8a9aff' : isSystem ? '#facc15' : '#d0d7e2';
+      const isUser = n.role === 'user';
+      const background = isSystem ? '#2f2413' : isUser ? '#1d2540' : '#16213b';
+      const borderColor = n.id === activeNodeId ? '#6366f1' : isSystem ? '#f59e0b' : isUser ? '#2f3b5d' : '#23304a';
+      const textColor = isSystem ? '#fef6d8' : '#e2e8f0';
+      const shadow = n.id === activeNodeId ? '0 24px 48px rgba(76, 102, 245, 0.35)' : '0 20px 40px rgba(3, 7, 18, 0.6)';
 
       return {
         id: n.id,
@@ -140,15 +142,15 @@ function ChatGraphInner({
         position: positions[n.id] ?? { x: 0, y: 0 },
         draggable: false,
         style: {
-          border: n.id === activeNodeId ? '2px solid #8a9aff' : `1px solid ${borderColor}`,
+          border: n.id === activeNodeId ? '2px solid #6366f1' : `1px solid ${borderColor}`,
           borderRadius: 16,
           padding: 14,
           background,
-          color: '#0f172a',
+          color: textColor,
           fontSize: 13,
           fontWeight: 500,
           lineHeight: 1.45,
-          boxShadow: '0 12px 24px rgba(15, 23, 42, 0.08)',
+          boxShadow: shadow,
           maxWidth: 280,
           overflow: 'hidden',
           whiteSpace: 'pre-wrap',
@@ -386,17 +388,20 @@ function ChatGraphInner({
         maxZoom={1.5}
       >
         <MiniMap
-          style={{ background: '#f1f3f9', borderRadius: 12, border: '1px solid #d8e1f2', padding: 6 }}
-          nodeColor={(n) => (n.style && typeof n.style === 'object' ? (n.style as any).background : '#e5e7eb')}
-          nodeStrokeColor={() => '#94a3b8'}
+          style={{ background: '#0f172a', borderRadius: 12, border: '1px solid #1f2937', padding: 6 }}
+          nodeColor={(n) => {
+            const bg = n.style && typeof n.style === 'object' ? (n.style as any).background : null;
+            return typeof bg === 'string' ? bg : '#1f2a44';
+          }}
+          nodeStrokeColor={() => '#6366f1'}
           nodeBorderRadius={12}
         />
         <Controls
-          style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #d0d7e2' }}
+          style={{ background: 'rgba(15, 23, 42, 0.92)', borderRadius: 12, border: '1px solid #1f2937', color: '#e2e8f0' }}
           onInteractiveChange={(next) => setIsInteractive(next)}
           showInteractive
         />
-        <Background color="#dbe4ff" gap={24} />
+        <Background color="#27364d" gap={24} />
       </ReactFlow>
 
       {showActions && (
@@ -405,25 +410,25 @@ function ChatGraphInner({
             position: 'absolute',
             right: 16,
             top: 16,
-            background: 'rgba(255, 255, 255, 0.9)',
-            boxShadow: '0 12px 24px rgba(15, 23, 42, 0.12)',
+            background: 'rgba(15, 23, 42, 0.9)',
+            boxShadow: '0 20px 40px rgba(3, 7, 18, 0.55)',
             borderRadius: 12,
             padding: '12px 16px',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'stretch',
             gap: 10,
-            border: '1px solid #d0d7e2',
+            border: '1px solid #1f2937',
           }}
         >
-          <span style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>Branch actions</span>
+          <span style={{ fontSize: 13, color: '#f8fafc', fontWeight: 600 }}>Branch actions</span>
           {canFork && onForkActive && (
             <button
               onClick={onForkActive}
               style={{
-                background: '#e0f2fe',
-                border: '1px solid #bae6fd',
-                color: '#0369a1',
+                background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
+                border: '1px solid #3b82f6',
+                color: '#e0f2ff',
                 borderRadius: 999,
                 padding: '6px 12px',
                 fontWeight: 600,
@@ -436,9 +441,9 @@ function ChatGraphInner({
             <button
               onClick={onDeleteActive}
               style={{
-                background: '#fee2e2',
-                border: '1px solid #fecaca',
-                color: '#b91c1c',
+                background: 'linear-gradient(135deg, #7f1d1d, #b91c1c)',
+                border: '1px solid #dc2626',
+                color: '#fee2e2',
                 borderRadius: 999,
                 padding: '6px 12px',
                 fontWeight: 600,

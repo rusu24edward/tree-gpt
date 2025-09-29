@@ -146,16 +146,16 @@ export default function ChatPane({
           display: flex;
           flex-direction: column;
           height: 100%;
-          background: #f7f8ff;
-          color: #0f172a;
+          background: #0b1120;
+          color: #e2e8f0;
         }
         .toolbar {
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 20px 24px 16px;
-          border-bottom: 1px solid #e2e8f0;
-          background: #ffffff;
+          border-bottom: 1px solid #1f2937;
+          background: #111c2e;
         }
         .toolbar-copy {
           display: flex;
@@ -165,10 +165,11 @@ export default function ChatPane({
         .title {
           font-size: 15px;
           font-weight: 600;
+          color: #f8fafc;
         }
         .subtitle {
           font-size: 13px;
-          color: #64748b;
+          color: #94a3b8;
         }
         .scroll {
           flex: 1;
@@ -182,30 +183,30 @@ export default function ChatPane({
           text-align: center;
           font-size: 18px;
           font-weight: 600;
-          color: rgba(15, 23, 42, 0.55);
+          color: #7c89c4;
           margin: 40px auto 12px;
         }
         .placeholder {
           font-size: 14px;
-          color: #64748b;
-          background: #ffffff;
-          border: 1px dashed #cbd5e1;
+          color: #94a3b8;
+          background: #111c2e;
+          border: 1px dashed #273349;
           border-radius: 16px;
           padding: 16px;
         }
         .bubble {
           border-radius: 18px;
           padding: 16px 18px;
-          background: #ffffff;
-          border: 1px solid #e2e8f0;
-          box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+          background: #16213b;
+          border: 1px solid #23304a;
+          box-shadow: 0 10px 30px rgba(9, 13, 24, 0.35);
           display: flex;
           flex-direction: column;
           gap: 8px;
         }
         .bubble.user {
-          background: #f1f5ff;
-          border-color: #dbeafe;
+          background: #1d2540;
+          border-color: #2f3b5d;
         }
         .meta {
           display: flex;
@@ -214,15 +215,15 @@ export default function ChatPane({
           font-size: 12px;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          color: #94a3b8;
+          color: #7c89c4;
         }
         .content {
           white-space: pre-wrap;
           line-height: 1.6;
         }
         .composer {
-          border-top: 1px solid #e2e8f0;
-          background: #ffffff;
+          border-top: 1px solid #1f2937;
+          background: #111c2e;
           padding: 20px 24px 24px;
           display: flex;
           flex-direction: column;
@@ -230,19 +231,19 @@ export default function ChatPane({
         }
         textarea {
           width: 100%;
-          background: #f8fafc;
-          color: inherit;
-          border: 1px solid #cbd5e1;
+          background: #0b1424;
+          color: #f8fafc;
+          border: 1px solid #273349;
           border-radius: 16px;
           padding: 16px;
           box-sizing: border-box;
           resize: vertical;
           font-size: 14px;
           line-height: 1.5;
-          box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.04);
+          box-shadow: inset 0 2px 6px rgba(8, 12, 24, 0.35);
         }
         textarea::placeholder {
-          color: #94a3b8;
+          color: #64748b;
         }
         .composer-actions {
           display: flex;
@@ -250,13 +251,16 @@ export default function ChatPane({
         }
         button {
           border-radius: 999px;
-          border: 1px solid #1f2937;
-          background: linear-gradient(135deg, #141a29, #2a3b7d);
+          border: 1px solid #4654d5;
+          background: linear-gradient(135deg, #4c6ef5, #6366f1);
           color: #f8fafc;
           padding: 10px 24px;
           font-weight: 600;
           font-size: 14px;
-          box-shadow: 0 6px 16px rgba(37, 56, 110, 0.25);
+          box-shadow: 0 12px 30px rgba(76, 102, 245, 0.35);
+        }
+        button:hover:enabled {
+          box-shadow: 0 16px 36px rgba(76, 102, 245, 0.45);
         }
         button:disabled {
           opacity: 0.5;
@@ -264,15 +268,16 @@ export default function ChatPane({
           box-shadow: none;
         }
         .danger {
-          background: #fee2e2;
-          border-color: #fecaca;
-          color: #b91c1c;
+          background: linear-gradient(135deg, #7f1d1d, #b91c1c);
+          border-color: #ef4444;
+          color: #fee2e2;
           box-shadow: none;
           padding: 8px 16px;
         }
         .danger:disabled {
-          background: #fef2f2;
+          background: #3f1212;
           color: #fca5a5;
+          border-color: #7f1d1d;
         }
       `}</style>
     </div>

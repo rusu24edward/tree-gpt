@@ -486,17 +486,17 @@ export default function Home() {
           display: grid;
           grid-template-rows: 72px 1fr 52px;
           height: 100vh;
-          background: radial-gradient(circle at top left, #f8f9ff 0%, #eef2ff 55%, #e4ecff 100%);
-          color: #0f172a;
+          background: radial-gradient(circle at top left, #030712 0%, #0b1120 55%, #111c2e 100%);
+          color: #e2e8f0;
         }
         header {
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 0 32px;
-          background: rgba(255, 255, 255, 0.88);
+          background: rgba(15, 23, 42, 0.82);
           backdrop-filter: blur(16px);
-          border-bottom: 1px solid #dbe3f5;
+          border-bottom: 1px solid #1f2937;
         }
         .title {
           display: flex;
@@ -506,10 +506,11 @@ export default function Home() {
         .title span {
           font-size: 18px;
           font-weight: 700;
+          color: #f8fafc;
         }
         .title small {
           font-size: 12px;
-          color: #6b7280;
+          color: #94a3b8;
         }
         .header-actions {
           display: flex;
@@ -517,18 +518,18 @@ export default function Home() {
         }
         button {
           border-radius: 999px;
-          border: 1px solid #c7cff9;
-          background: linear-gradient(135deg, #f1f3ff, #dfe3ff);
-          color: #1f2937;
+          border: 1px solid #4654d5;
+          background: linear-gradient(135deg, #4c6ef5, #6366f1);
+          color: #f8fafc;
           padding: 8px 20px;
           font-weight: 600;
           font-size: 13px;
-          box-shadow: 0 12px 24px rgba(79, 97, 185, 0.18);
+          box-shadow: 0 16px 32px rgba(76, 102, 245, 0.35);
           transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
         }
         button:hover:enabled {
           transform: translateY(-1px);
-          box-shadow: 0 18px 36px rgba(79, 97, 185, 0.24);
+          box-shadow: 0 22px 40px rgba(76, 102, 245, 0.45);
         }
         button:disabled {
           opacity: 0.5;
@@ -547,9 +548,9 @@ export default function Home() {
         .graph,
         .chat {
           border-radius: 28px;
-          background: rgba(255, 255, 255, 0.82);
-          border: 1px solid #dbe3f5;
-          box-shadow: 0 28px 56px rgba(30, 64, 175, 0.12);
+          background: rgba(17, 28, 46, 0.92);
+          border: 1px solid #1f2937;
+          box-shadow: 0 32px 60px rgba(3, 7, 18, 0.65);
           min-height: 0;
           overflow: hidden;
         }
@@ -563,11 +564,14 @@ export default function Home() {
           justify-content: space-between;
           padding: 20px 22px 12px;
           font-weight: 600;
-          color: #1e293b;
+          color: #dbeafe;
         }
         .trees-header button {
           padding: 6px 16px;
           font-size: 12px;
+          border: 1px solid #3f4cc9;
+          background: rgba(79, 70, 229, 0.2);
+          color: #e0e7ff;
           box-shadow: none;
         }
         .tree-list {
@@ -584,22 +588,22 @@ export default function Home() {
           flex-direction: column;
           gap: 12px;
           text-align: left;
-          border: 1px solid #d9e1ff;
+          border: 1px solid #23304a;
           padding: 16px;
           border-radius: 18px;
-          background: #ffffff;
-          color: inherit;
-          box-shadow: 0 14px 28px rgba(30, 64, 175, 0.12);
+          background: linear-gradient(135deg, rgba(29, 44, 73, 0.92), rgba(21, 32, 54, 0.92));
+          color: #e2e8f0;
+          box-shadow: 0 24px 48px rgba(3, 7, 18, 0.55);
           transition: border 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
         }
         .tree-item:hover:not(.active) {
           transform: translateY(-1px);
-          box-shadow: 0 20px 36px rgba(30, 64, 175, 0.18);
+          box-shadow: 0 28px 56px rgba(3, 7, 18, 0.65);
         }
         .tree-item.active {
           border-color: #6366f1;
-          background: linear-gradient(135deg, rgba(129, 140, 248, 0.2), rgba(59, 130, 246, 0.18));
-          box-shadow: 0 24px 48px rgba(79, 97, 185, 0.24);
+          background: linear-gradient(135deg, rgba(79, 70, 229, 0.4), rgba(59, 130, 246, 0.28));
+          box-shadow: 0 32px 60px rgba(76, 102, 245, 0.35);
         }
         .tree-item-top {
           position: relative;
@@ -641,16 +645,16 @@ export default function Home() {
           width: 32px;
           height: 32px;
           border-radius: 10px;
-          border: 1px solid rgba(99, 102, 241, 0.35);
-          background: rgba(99, 102, 241, 0.12);
-          color: #1e293b;
+          border: 1px solid rgba(99, 102, 241, 0.4);
+          background: rgba(79, 70, 229, 0.2);
+          color: #e2e8f0;
           font-size: 16px;
           box-shadow: none;
           transition: transform 0.18s ease, box-shadow 0.18s ease;
         }
         .icon-button:hover:enabled {
           transform: translateY(-1px);
-          box-shadow: 0 12px 20px rgba(79, 97, 185, 0.18);
+          box-shadow: 0 16px 28px rgba(76, 102, 245, 0.25);
         }
         .icon-button:disabled {
           opacity: 0.5;
@@ -659,9 +663,9 @@ export default function Home() {
           transform: none;
         }
         .icon-button.danger {
-          border-color: #fecaca;
-          background: #fee2e2;
-          color: #b91c1c;
+          border-color: #7f1d1d;
+          background: rgba(127, 29, 29, 0.35);
+          color: #fca5a5;
         }
         .tree-title {
           display: block;
@@ -673,9 +677,9 @@ export default function Home() {
         }
         .tree-item-edit-actions button {
           border-radius: 999px;
-          border: 1px solid #c7cff9;
-          background: rgba(99, 102, 241, 0.12);
-          color: #1e293b;
+          border: 1px solid #3f4cc9;
+          background: rgba(79, 70, 229, 0.18);
+          color: #e0e7ff;
           padding: 6px 14px;
           font-size: 12px;
           box-shadow: none;
@@ -683,17 +687,17 @@ export default function Home() {
         }
         .tree-item-edit-actions button:hover:enabled {
           transform: translateY(-1px);
-          box-shadow: 0 10px 18px rgba(79, 97, 185, 0.18);
+          box-shadow: 0 14px 28px rgba(76, 102, 245, 0.25);
         }
         .tree-item-edit-actions .danger {
-          background: #fee2e2;
-          border-color: #fecaca;
-          color: #b91c1c;
+          background: rgba(127, 29, 29, 0.45);
+          border-color: #b91c1c;
+          color: #fecaca;
         }
         .tree-item-edit-actions .secondary {
-          background: rgba(148, 163, 184, 0.2);
-          border-color: rgba(148, 163, 184, 0.5);
-          color: #475569;
+          background: rgba(100, 116, 139, 0.25);
+          border-color: rgba(100, 116, 139, 0.55);
+          color: #cbd5f5;
         }
         .tree-item-edit {
           display: flex;
@@ -707,12 +711,12 @@ export default function Home() {
         }
         .tree-item-edit input {
           border-radius: 12px;
-          border: 1px solid #cbd5e1;
+          border: 1px solid #273349;
           padding: 12px;
           font-size: 13px;
-          background: #f8fafc;
-          color: inherit;
-          box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.06);
+          background: #0b1424;
+          color: #f8fafc;
+          box-shadow: inset 0 2px 6px rgba(8, 12, 24, 0.35);
         }
         .tree-item-edit input:disabled {
           opacity: 0.6;
@@ -721,14 +725,14 @@ export default function Home() {
         .hint {
           padding: 14px;
           border-radius: 16px;
-          background: rgba(241, 245, 249, 0.72);
-          color: #64748b;
+          background: rgba(30, 41, 59, 0.76);
+          color: #cbd5f5;
           font-size: 13px;
         }
         .graph {
           position: relative;
           display: flex;
-          background: linear-gradient(180deg, rgba(248, 249, 255, 0.9), rgba(231, 235, 255, 0.9));
+          background: linear-gradient(180deg, rgba(9, 13, 24, 0.95), rgba(17, 28, 46, 0.92));
         }
         .graph > div {
           flex: 1;
@@ -737,7 +741,7 @@ export default function Home() {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #64748b;
+          color: #94a3b8;
           font-size: 14px;
         }
         .chat {
@@ -749,9 +753,9 @@ export default function Home() {
           align-items: center;
           justify-content: center;
           padding: 0 32px;
-          background: rgba(255, 255, 255, 0.88);
-          border-top: 1px solid #dbe3f5;
-          color: #475569;
+          background: rgba(15, 23, 42, 0.88);
+          border-top: 1px solid #1f2937;
+          color: #94a3b8;
           font-size: 12px;
           backdrop-filter: blur(16px);
         }
