@@ -13,6 +13,13 @@ type Props = {
   onEnsureTree?: () => Promise<string | null>;
   deleteLabel?: string;
   focusComposerToken?: number;
+  onPendingUserMessage?: (payload: {
+    id: string;
+    parentId: string | null;
+    content: string;
+    treeId: string;
+  }) => void;
+  onPendingUserMessageFailed?: (payload: { id: string; parentId: string | null }) => void;
 };
 
 type DisplayMessage = PathResponse['path'][number] & { id?: string; pending?: boolean };
@@ -28,6 +35,8 @@ export default function ChatPane({
   onEnsureTree,
   deleteLabel = 'Delete branch',
   focusComposerToken,
+  onPendingUserMessage,
+  onPendingUserMessageFailed,
 }: Props) {
   const [path, setPath] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
@@ -95,6 +104,10 @@ export default function ChatPane({
     ]);
     setInput('');
 
+    if (onPendingUserMessage) {
+      onPendingUserMessage({ id: userPendingId, parentId: parent, content: trimmed, treeId: targetTreeId });
+    }
+
     try {
       const res = await fetchJSON<any>(`/api/messages`, {
         method: 'POST',
@@ -110,6 +123,9 @@ export default function ChatPane({
       setPath((prev) => prev.filter((msg) => msg.id !== userPendingId && msg.id !== assistantPendingId));
       setInput(trimmed);
       setIsSending(false);
+      if (onPendingUserMessageFailed) {
+        onPendingUserMessageFailed({ id: userPendingId, parentId: parent });
+      }
     }
   }
 

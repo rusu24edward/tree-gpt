@@ -21,6 +21,7 @@ export default function Home() {
   const [isGraphExpanded, setIsGraphExpanded] = useState(false);
   const pendingFocusNodeIdRef = useRef<string | null>(null);
   const overlayCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const pendingGraphNodeIdsRef = useRef<Set<string>>(new Set());
 
   const hasMessages = graph.nodes.length > 0;
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
@@ -61,6 +62,7 @@ export default function Home() {
       try {
         const data = await fetchJSON<GraphResponse>(`/api/messages/graph/${treeId}`);
         setGraph(data);
+        pendingGraphNodeIdsRef.current.clear();
         const root = data.nodes.find((n) => !n.parent_id)?.id ?? null;
         const focusId = opts?.focusNodeId ?? null;
         const shouldSelectRoot = Boolean(opts?.selectRoot);
@@ -241,6 +243,60 @@ export default function Home() {
     setActiveNodeId(activeNode.parent_id);
     await refreshGraph(activeTreeId);
   }, [activeTreeId, activeNodeId, activeNode, handleDeleteTree, refreshGraph]);
+
+  const handlePendingUserMessage = useCallback(
+    ({ id, parentId, content, treeId }: { id: string; parentId: string | null; content: string; treeId: string }) => {
+      pendingGraphNodeIdsRef.current.add(id);
+      setGraph((prev) => {
+        const nodeExists = prev.nodes.some((node) => node.id === id);
+        if (nodeExists) return prev;
+
+        const newNode: GraphResponse['nodes'][number] = {
+          id,
+          role: 'user',
+          label: content,
+          parent_id: parentId,
+          user_label: content,
+          assistant_label: null,
+        };
+
+        const nextNodes = [...prev.nodes, newNode];
+
+        const nextEdges = parentId
+          ? prev.edges.some((edge) => edge.target === id)
+            ? prev.edges
+            : [
+                ...prev.edges,
+                {
+                  id: `pending-edge-${parentId}-${id}`,
+                  source: parentId,
+                  target: id,
+                } as GraphResponse['edges'][number],
+              ]
+          : prev.edges;
+
+        return { nodes: nextNodes, edges: nextEdges };
+      });
+
+      if (treeId === activeTreeId || !activeTreeId) {
+        setActiveNodeId(id);
+      }
+    },
+    [activeTreeId]
+  );
+
+  const handlePendingUserMessageFailed = useCallback(({ id, parentId }: { id: string; parentId: string | null }) => {
+    pendingGraphNodeIdsRef.current.delete(id);
+    setGraph((prev) => {
+      const nextNodes = prev.nodes.filter((node) => node.id !== id);
+      const nextEdges = prev.edges.filter((edge) => edge.source !== id && edge.target !== id);
+      return { nodes: nextNodes, edges: nextEdges };
+    });
+    setActiveNodeId((current) => {
+      if (current !== id) return current;
+      return parentId ?? null;
+    });
+  }, []);
 
   const handleAfterSend = useCallback(
     (newAssistantId: string) => {
@@ -494,6 +550,8 @@ export default function Home() {
             onEnsureTree={ensureActiveTree}
             deleteLabel={deleteLabel}
             focusComposerToken={composerFocusToken}
+            onPendingUserMessage={handlePendingUserMessage}
+            onPendingUserMessageFailed={handlePendingUserMessageFailed}
           />
         </div>
 
