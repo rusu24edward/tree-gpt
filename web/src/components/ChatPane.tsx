@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { PathResponse } from '../lib/api';
 import { fetchJSON } from '../lib/api';
 
@@ -169,13 +171,15 @@ export default function ChatPane({
               <span className="role">{m.role}</span>
             </div>
             <div className="content">
-              {m.pending && m.role === 'assistant' ? (
+              {m.pending && m.role === 'assistant' && (!m.content || m.content.trim().length === 0) ? (
                 <div className="loading">
                   <span className="spinner" aria-label="Waiting for response" />
                   <span className="loading-text">Awaiting response…</span>
                 </div>
               ) : (
-                m.content
+                <ReactMarkdown className="markdown" remarkPlugins={[remarkGfm]}>
+                  {m.content}
+                </ReactMarkdown>
               )}
             </div>
           </div>
@@ -278,8 +282,70 @@ export default function ChatPane({
           color: #8e8ea0;
         }
         .content {
-          white-space: pre-wrap;
           line-height: 1.6;
+        }
+        .markdown {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .markdown :global(p) {
+          margin: 0;
+        }
+        .markdown :global(p + p) {
+          margin-top: 12px;
+        }
+        .markdown :global(h1),
+        .markdown :global(h2),
+        .markdown :global(h3),
+        .markdown :global(h4),
+        .markdown :global(h5),
+        .markdown :global(h6) {
+          margin: 0;
+          font-weight: 700;
+          color: #ececf1;
+        }
+        .markdown :global(h1) {
+          font-size: 20px;
+        }
+        .markdown :global(h2) {
+          font-size: 18px;
+        }
+        .markdown :global(h3) {
+          font-size: 16px;
+        }
+        .markdown :global(ul),
+        .markdown :global(ol) {
+          margin: 0;
+          padding-left: 20px;
+        }
+        .markdown :global(li) {
+          margin: 6px 0;
+        }
+        .markdown :global(code) {
+          font-family: 'Source Code Pro', Menlo, Consolas, monospace;
+          font-size: 13px;
+          background: rgba(64, 65, 79, 0.8);
+          padding: 2px 6px;
+          border-radius: 6px;
+        }
+        .markdown :global(pre) {
+          background: rgba(64, 65, 79, 0.9);
+          padding: 14px;
+          border-radius: 12px;
+          overflow: auto;
+          border: 1px solid #565869;
+        }
+        .markdown :global(pre code) {
+          display: block;
+          padding: 0;
+          background: transparent;
+        }
+        .markdown :global(blockquote) {
+          margin: 0;
+          padding-left: 12px;
+          border-left: 3px solid #565869;
+          color: #c5c5d2;
         }
         .loading {
           display: flex;
