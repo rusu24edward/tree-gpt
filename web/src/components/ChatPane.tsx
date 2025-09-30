@@ -15,6 +15,8 @@ type Props = {
   focusComposerToken?: number;
 };
 
+type DisplayMessage = PathResponse['path'][number] & { id?: string; pending?: boolean };
+
 export default function ChatPane({
   activeNodeId,
   treeId,
@@ -27,8 +29,9 @@ export default function ChatPane({
   deleteLabel = 'Delete branch',
   focusComposerToken,
 }: Props) {
-  const [path, setPath] = useState<PathResponse['path']>([]);
+  const [path, setPath] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const effectiveNodeId = useMemo(
@@ -42,9 +45,16 @@ export default function ChatPane({
     async function load() {
       if (effectiveNodeId) {
         const p = await fetchJSON<PathResponse>(`/api/messages/path/${effectiveNodeId}`);
-        setPath(p.path);
+        const shaped = p.path.map((msg, idx) => ({
+          ...msg,
+          pending: false,
+          id: `${msg.role}-${idx}`,
+        }));
+        setPath(shaped);
+        setIsSending(false);
       } else {
         setPath([]);
+        setIsSending(false);
       }
     }
     load();
@@ -61,7 +71,9 @@ export default function ChatPane({
   }, [focusComposerToken]);
 
   async function send() {
-    if (input.trim().length === 0) return;
+    if (isSending) return;
+    const trimmed = input.trim();
+    if (trimmed.length === 0) return;
 
     let targetTreeId = treeId;
     if (!targetTreeId && onEnsureTree) {
@@ -71,22 +83,42 @@ export default function ChatPane({
 
     const parent = activeNodeId ?? defaultParentId ?? null;
 
-    const res = await fetchJSON<any>(`/api/messages`, {
-      method: 'POST',
-      body: JSON.stringify({
-        tree_id: targetTreeId,
-        parent_id: parent,
-        content: input,
-      }),
-    });
+    const stamp = Date.now().toString(36);
+    const userPendingId = `pending-user-${stamp}`;
+    const assistantPendingId = `pending-assistant-${stamp}`;
+
+    setIsSending(true);
+    setPath((prev) => [
+      ...prev,
+      { role: 'user', content: trimmed, pending: true, id: userPendingId },
+      { role: 'assistant', content: '', pending: true, id: assistantPendingId },
+    ]);
     setInput('');
-    onAfterSend(res.id);
+
+    try {
+      const res = await fetchJSON<any>(`/api/messages`, {
+        method: 'POST',
+        body: JSON.stringify({
+          tree_id: targetTreeId,
+          parent_id: parent,
+          content: trimmed,
+        }),
+      });
+      onAfterSend(res.id);
+    } catch (err) {
+      console.error('Failed to send message', err);
+      setPath((prev) => prev.filter((msg) => msg.id !== userPendingId && msg.id !== assistantPendingId));
+      setInput(trimmed);
+      setIsSending(false);
+    }
   }
 
   const handleKeyDown = (evt: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (evt.key === 'Enter' && !evt.shiftKey) {
       evt.preventDefault();
-      send();
+      if (!isSending) {
+        void send();
+      }
     }
   };
 
@@ -116,11 +148,20 @@ export default function ChatPane({
           </div>
         )}
         {path.map((m, idx) => (
-          <div key={idx} className={`bubble ${m.role}`}>
+          <div key={m.id ?? idx} className={`bubble ${m.role}${m.pending ? ' pending' : ''}`}>
             <div className="meta">
               <span className="role">{m.role}</span>
             </div>
-            <div className="content">{m.content}</div>
+            <div className="content">
+              {m.pending && m.role === 'assistant' ? (
+                <div className="loading">
+                  <span className="spinner" aria-label="Waiting for response" />
+                  <span className="loading-text">Awaiting response…</span>
+                </div>
+              ) : (
+                m.content
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -135,7 +176,7 @@ export default function ChatPane({
           ref={composerRef}
         />
         <div className="composer-actions">
-          <button onClick={send} disabled={input.trim().length === 0}>
+          <button onClick={() => void send()} disabled={isSending || input.trim().length === 0}>
             Send
           </button>
         </div>
@@ -204,6 +245,9 @@ export default function ChatPane({
           flex-direction: column;
           gap: 8px;
         }
+        .bubble.pending {
+          opacity: 0.85;
+        }
         .bubble.user {
           background: #343541;
           border-color: #565869;
@@ -220,6 +264,23 @@ export default function ChatPane({
         .content {
           white-space: pre-wrap;
           line-height: 1.6;
+        }
+        .loading {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .spinner {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          border: 2px solid rgba(236, 236, 241, 0.2);
+          border-top-color: #ececf1;
+          animation: spin 0.9s linear infinite;
+        }
+        .loading-text {
+          color: #8e8ea0;
+          font-size: 13px;
         }
         .composer {
           border-top: 1px solid #565869;
@@ -279,6 +340,11 @@ export default function ChatPane({
           background: #5f1f22;
           color: #f9d0d2;
           border-color: #803135;
+        }
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
         }
       `}</style>
     </div>
