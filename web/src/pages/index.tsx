@@ -24,6 +24,8 @@ export default function Home() {
   const pendingGraphNodeIdsRef = useRef<Map<string, { treeId: string; parentId: string | null }>>(new Map());
   const lastSelectedNodeRef = useRef<Map<string, string>>(new Map());
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
+  const activeTreeIdRef = useRef<string | null>(null);
+  const blankTreeIdRef = useRef<string | null>(null);
 
   const hasMessages = graph.nodes.length > 0;
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
@@ -51,6 +53,14 @@ export default function Home() {
   useEffect(() => {
     ensureInitialTree();
   }, [ensureInitialTree]);
+
+  useEffect(() => {
+    activeTreeIdRef.current = activeTreeId;
+  }, [activeTreeId]);
+
+  useEffect(() => {
+    blankTreeIdRef.current = blankTreeId;
+  }, [blankTreeId]);
 
   type RefreshOptions = {
     selectRoot?: boolean;
@@ -357,11 +367,11 @@ export default function Home() {
     ({ treeId, pendingUserId }: AfterSendPayload) => {
       pendingGraphNodeIdsRef.current.delete(pendingUserId);
 
-      if (blankTreeId === treeId) {
+      if (blankTreeIdRef.current === treeId) {
         setBlankTreeId(null);
       }
 
-      if (treeId !== activeTreeId) {
+      if (treeId !== activeTreeIdRef.current) {
         return;
       }
 
@@ -379,7 +389,7 @@ export default function Home() {
 
       void refreshGraph(treeId);
     },
-    [activeTreeId, blankTreeId, refreshGraph]
+    [refreshGraph]
   );
 
   const handleForkActive = useCallback(async () => {
