@@ -2,7 +2,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json ./
-RUN npm install --no-audit --no-fund
+# Use BuildKit cache to speed up installs across rebuilds
+RUN --mount=type=cache,target=/root/.npm npm install --no-audit --no-fund
 
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -10,7 +11,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Ensure public exists even if empty in source
 RUN mkdir -p public
-RUN npm run build
+# Persist Next.js build cache between builds for faster increments
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app

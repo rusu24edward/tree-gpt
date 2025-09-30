@@ -1,0 +1,20 @@
+# Node artifacts
+node_modules
+npm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+
+# Next.js build output/cache
+.next
+.next/cache
+out
+
+# VCS and editor
+.git
+.gitignore
+.DS_Store
+*.swp
+
+# Env
+.env
+.env.local
