@@ -23,6 +23,7 @@ type Props = {
   deleteLabel?: string;
   onForkActive?: () => void;
   showInlineActions?: boolean;
+  unreadNodeIds?: Set<string>;
 };
 
 const NODE_HORIZONTAL_GAP = 260;
@@ -159,6 +160,7 @@ function ChatGraphInner({
   deleteLabel,
   onForkActive,
   showInlineActions,
+  unreadNodeIds,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const initialViewDone = useRef(false);
@@ -191,9 +193,24 @@ function ChatGraphInner({
       const isSystem = n.role === 'system';
       const isUser = n.role === 'user';
       const background = isSystem ? '#3a382f' : isUser ? '#343541' : '#444654';
-      const borderColor = n.id === activeNodeId ? '#10a37f' : '#565869';
+      const isActive = n.id === activeNodeId;
+      const isUnread = unreadNodeIds?.has(n.id) ?? false;
+      const baseBorderColor = isActive ? '#10a37f' : '#565869';
+      const borderColor = isUnread && !isActive ? '#f7c948' : baseBorderColor;
+      const borderWidth = isActive || isUnread ? 4 : 1;
       const textColor = '#ececf1';
-      const shadow = n.id === activeNodeId ? '0 0 0 1px #10a37f' : 'none';
+      const shadow = (() => {
+        if (isActive && isUnread) {
+          return '0 0 0 1px #10a37f, 0 0 0 6px rgba(247, 201, 72, 0.28)';
+        }
+        if (isActive) {
+          return '0 0 0 1px #10a37f';
+        }
+        if (isUnread) {
+          return '0 0 0 4px rgba(247, 201, 72, 0.18)';
+        }
+        return 'none';
+      })();
 
       return {
         id: n.id,
@@ -201,7 +218,7 @@ function ChatGraphInner({
         position: positions[n.id] ?? { x: 0, y: 0 },
         draggable: false,
         style: {
-          border: n.id === activeNodeId ? '2px solid #10a37f' : `1px solid ${borderColor}`,
+          border: `${borderWidth}px solid ${borderColor}`,
           borderRadius: 16,
           padding: 14,
           background,

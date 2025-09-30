@@ -24,6 +24,7 @@ export default function Home() {
   const pendingGraphNodeIdsRef = useRef<Map<string, { treeId: string; parentId: string | null }>>(new Map());
   const lastSelectedNodeRef = useRef<Map<string, string>>(new Map());
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
+  const [unreadMap, setUnreadMap] = useState<Map<string, Set<string>>>(() => new Map());
   const activeTreeIdRef = useRef<string | null>(null);
   const blankTreeIdRef = useRef<string | null>(null);
 
@@ -62,6 +63,68 @@ export default function Home() {
     blankTreeIdRef.current = blankTreeId;
   }, [blankTreeId]);
 
+  const markNodeUnread = useCallback((treeId: string, nodeId: string) => {
+    if (!treeId || !nodeId) return;
+    setUnreadMap((prev) => {
+      const existing = prev.get(treeId);
+      if (existing?.has(nodeId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      const nextSet = new Set(existing ?? []);
+      nextSet.add(nodeId);
+      next.set(treeId, nextSet);
+      return next;
+    });
+  }, []);
+
+  const markNodeRead = useCallback((treeId: string, nodeId: string) => {
+    if (!treeId || !nodeId) return;
+    setUnreadMap((prev) => {
+      const existing = prev.get(treeId);
+      if (!existing || !existing.has(nodeId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      const nextSet = new Set(existing);
+      nextSet.delete(nodeId);
+      if (nextSet.size === 0) {
+        next.delete(treeId);
+      } else {
+        next.set(treeId, nextSet);
+      }
+      return next;
+    });
+  }, []);
+
+  const pruneUnreadForTree = useCallback((treeId: string, validIds: Set<string>) => {
+    setUnreadMap((prev) => {
+      const existing = prev.get(treeId);
+      if (!existing) {
+        return prev;
+      }
+      let changed = false;
+      const nextSet = new Set<string>();
+      existing.forEach((id) => {
+        if (validIds.has(id)) {
+          nextSet.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      if (!changed) {
+        return prev;
+      }
+      const next = new Map(prev);
+      if (nextSet.size === 0) {
+        next.delete(treeId);
+      } else {
+        next.set(treeId, nextSet);
+      }
+      return next;
+    });
+  }, []);
+
   type RefreshOptions = {
     selectRoot?: boolean;
     focusNodeId?: string | null;
@@ -74,6 +137,7 @@ export default function Home() {
       try {
         const data = await fetchJSON<GraphResponse>(`/api/messages/graph/${treeId}`);
         setGraph(data);
+        pruneUnreadForTree(treeId, new Set(data.nodes.map((n) => n.id)));
         pendingGraphNodeIdsRef.current.clear();
         const root = data.nodes.find((n) => !n.parent_id)?.id ?? null;
         const remembered = lastSelectedNodeRef.current.get(treeId) ?? null;
@@ -122,7 +186,7 @@ export default function Home() {
         setIsSyncingGraph(false);
       }
     },
-    [blankTreeId]
+    [blankTreeId, pruneUnreadForTree]
   );
 
   useEffect(() => {
@@ -242,6 +306,14 @@ export default function Home() {
           }
         });
         lastSelectedNodeRef.current.delete(treeId);
+        setUnreadMap((prev) => {
+          if (!prev.has(treeId)) {
+            return prev;
+          }
+          const next = new Map(prev);
+          next.delete(treeId);
+          return next;
+        });
         const wasActive = treeId === activeTreeId;
         const wasEditing = treeId === editingTreeId;
         if (blankTreeId === treeId) {
@@ -356,16 +428,21 @@ export default function Home() {
       if (!currentScrollKey) return;
       if (scrollTop === null) {
         scrollPositionsRef.current.delete(currentScrollKey);
+        if (activeTreeId && activeNodeId && unreadMap.get(activeTreeId)?.has(activeNodeId)) {
+          markNodeRead(activeTreeId, activeNodeId);
+        }
       } else {
         scrollPositionsRef.current.set(currentScrollKey, scrollTop);
       }
     },
-    [currentScrollKey]
+    [currentScrollKey, activeTreeId, activeNodeId, unreadMap, markNodeRead]
   );
 
   const handleAfterSend = useCallback(
-    ({ treeId, pendingUserId }: AfterSendPayload) => {
+    ({ assistantId, treeId, pendingUserId }: AfterSendPayload) => {
       pendingGraphNodeIdsRef.current.delete(pendingUserId);
+
+      markNodeUnread(treeId, assistantId);
 
       if (blankTreeIdRef.current === treeId) {
         setBlankTreeId(null);
@@ -389,7 +466,7 @@ export default function Home() {
 
       void refreshGraph(treeId);
     },
-    [refreshGraph]
+    [markNodeUnread, refreshGraph]
   );
 
   const handleForkActive = useCallback(async () => {
@@ -493,6 +570,7 @@ export default function Home() {
 
   const canOverlayFork = Boolean(activeNode && handleForkActive);
   const canOverlayDelete = Boolean(activeNode && handleDeleteActive);
+  const unreadForActiveTree = activeTreeId ? unreadMap.get(activeTreeId) : undefined;
 
   return (
     <div className="app">
@@ -524,11 +602,13 @@ export default function Home() {
               const isEditing = editingTreeId === tree.id;
               const isPending = pendingTreeId === tree.id;
               const hasMutation = pendingTreeId !== null;
+              const unreadCount = unreadMap.get(tree.id)?.size ?? 0;
+              const hasUnread = unreadCount > 0;
               const displayTitle = tree.title && tree.title.trim().length > 0 ? tree.title : 'Untitled conversation';
               return (
                 <div
                   key={tree.id}
-                  className={`tree-item ${isActive ? 'active' : ''}`}
+                  className={`tree-item ${isActive ? 'active' : ''}${hasUnread ? ' unread' : ''}`}
                   onClick={() => {
                     if (isEditing || isPending) return;
                     void handleSelectTree(tree.id);
@@ -578,9 +658,17 @@ export default function Home() {
                             if (isPending) return;
                             void handleSelectTree(tree.id);
                           }}
+                          aria-label={hasUnread ? `${displayTitle} (new responses)` : displayTitle}
                           disabled={isPending}
                         >
                           <span className="tree-title">{displayTitle}</span>
+                          {hasUnread && (
+                            <span
+                              className="tree-indicator"
+                              aria-hidden
+                              title="New responses"
+                            />
+                          )}
                         </button>
                         <div className="tree-item-icons">
                           <button
@@ -656,6 +744,7 @@ export default function Home() {
               onForkActive={handleForkActive}
               deleteLabel={deleteLabel}
               showInlineActions={!isGraphExpanded}
+              unreadNodeIds={unreadForActiveTree}
             />
           ) : (
             <div className="empty">Create or select a conversation to see the graph.</div>
@@ -700,6 +789,7 @@ export default function Home() {
                 onForkActive={handleForkActive}
                 deleteLabel={deleteLabel}
                 showInlineActions={false}
+                unreadNodeIds={unreadForActiveTree}
               />
             </div>
           </div>
@@ -823,6 +913,9 @@ export default function Home() {
           color: #ececf1;
           transition: border 0.18s ease, background 0.18s ease;
         }
+        .tree-item.unread:not(.active) {
+          border-color: #f7c948;
+        }
         .tree-item:hover:not(.active) {
           background: #343541;
         }
@@ -896,6 +989,17 @@ export default function Home() {
           font-weight: 600;
           flex: 1;
           word-break: break-word;
+        }
+        .tree-indicator {
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: #f7c948;
+          box-shadow: 0 0 0 2px rgba(32, 33, 35, 0.9);
+        }
+        .tree-item.active .tree-indicator {
+          box-shadow: 0 0 0 2px rgba(52, 53, 65, 0.9);
         }
         .tree-item-edit-actions button {
           border-radius: 999px;
