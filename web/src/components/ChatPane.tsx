@@ -366,9 +366,6 @@ export default function ChatPane({
           display: flex;
           flex-direction: column;
           gap: 16px;
-          max-width: 940px;
-          width: 100%;
-          box-sizing: border-box;
         }
         .start-banner {
           text-align: center;
@@ -394,9 +391,6 @@ export default function ChatPane({
           display: flex;
           flex-direction: column;
           gap: 8px;
-          max-width: 840px;
-          width: 100%;
-          box-sizing: border-box;
         }
         .bubble.pending {
           opacity: 0.85;
