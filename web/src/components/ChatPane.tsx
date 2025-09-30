@@ -229,37 +229,79 @@ export default function ChatPane({
             Select a node in the graph, or start typing to begin a new branch from here.
           </div>
         )}
-        {path.map((m, idx) => (
-          <div key={m.id ?? idx} className={`bubble ${m.role}${m.pending ? ' pending' : ''}`}>
-            <div className="meta">
-              <span className="role">{m.role}</span>
+        {path.map((m, idx) => {
+          const messageId = m.id ?? `message-${idx}`;
+          const isAssistantPending = m.pending && m.role === 'assistant' && (!m.content || m.content.trim().length === 0);
+
+          let blockIndex = 0;
+
+          return (
+            <div key={messageId} className={`bubble ${m.role}${m.pending ? ' pending' : ''}`}>
+              <div className="meta">
+                <span className="role">{m.role}</span>
+              </div>
+              <div className="content">
+                {isAssistantPending ? (
+                  <div className="loading">
+                    <span className="spinner" aria-label="Waiting for response" />
+                    <span className="loading-text">Awaiting response…</span>
+                  </div>
+                ) : (
+                  <ReactMarkdown
+                    className="markdown"
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      code({ inline, className, children, ...props }) {
+                        if (inline) {
+                          return (
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          );
+                        }
+                        blockIndex += 1;
+                        const codeId = `${messageId}-code-${blockIndex}`;
+                        const rawCode = String(children).replace(/\n$/, '');
+                        return (
+                          <div className="code-block">
+                            <pre className={className} {...props}>
+                              <code>{children}</code>
+                            </pre>
+                            <div className="copy-row">
+                              <button
+                                type="button"
+                                className="copy-button"
+                                onClick={() => handleCopy(codeId, rawCode)}
+                                aria-label="Copy code block"
+                                title="Copy code block"
+                              >
+                                <span aria-hidden>{justCopiedId === codeId ? '✅' : '📋'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      },
+                    }}
+                  >
+                    {m.content}
+                  </ReactMarkdown>
+                )}
+              </div>
+              <div className="copy-row">
+                <button
+                  type="button"
+                  className="copy-button"
+                  onClick={() => handleCopy(messageId, m.content ?? '')}
+                  disabled={isAssistantPending}
+                  aria-label="Copy message"
+                  title="Copy message"
+                >
+                  <span aria-hidden>{justCopiedId === messageId ? '✅' : '📋'}</span>
+                </button>
+              </div>
             </div>
-            <div className="content">
-              {m.pending && m.role === 'assistant' && (!m.content || m.content.trim().length === 0) ? (
-                <div className="loading">
-                  <span className="spinner" aria-label="Waiting for response" />
-                  <span className="loading-text">Awaiting response…</span>
-                </div>
-              ) : (
-                <ReactMarkdown className="markdown" remarkPlugins={[remarkGfm]}>
-                  {m.content}
-                </ReactMarkdown>
-              )}
-            </div>
-            <div className="copy-row">
-              <button
-                type="button"
-                className="copy-button"
-                onClick={() => handleCopy(m.id ?? `message-${idx}`, m.content ?? '')}
-                disabled={m.pending && m.role === 'assistant' && (!m.content || m.content.trim().length === 0)}
-                aria-label="Copy message"
-                title="Copy message"
-              >
-                <span aria-hidden>{justCopiedId === (m.id ?? `message-${idx}`) ? '✅' : '📋'}</span>
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="composer">
@@ -406,11 +448,11 @@ export default function ChatPane({
           border-radius: 6px;
         }
         .markdown :global(pre) {
-          background: rgba(64, 65, 79, 0.9);
-          padding: 14px;
-          border-radius: 12px;
+          background: transparent;
+          padding: 0;
+          margin: 0;
+          border: none;
           overflow: auto;
-          border: 1px solid #565869;
         }
         .markdown :global(pre code) {
           display: block;
@@ -423,10 +465,28 @@ export default function ChatPane({
           border-left: 3px solid #565869;
           color: #c5c5d2;
         }
+        .code-block {
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          border: 1px solid #3f3f4b;
+          border-radius: 12px;
+          background: rgba(64, 65, 79, 0.85);
+          overflow: hidden;
+        }
+        .code-block pre {
+          padding: 14px;
+        }
         .copy-row {
           display: flex;
           justify-content: flex-end;
           margin-top: 6px;
+        }
+        .code-block .copy-row {
+          margin-top: 0;
+          padding: 6px 10px;
+          background: rgba(40, 41, 54, 0.6);
+          border-top: 1px solid #3f3f4b;
         }
         .copy-button {
           border: none;
