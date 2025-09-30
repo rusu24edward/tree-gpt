@@ -21,7 +21,7 @@ export default function Home() {
   const [isGraphExpanded, setIsGraphExpanded] = useState(false);
   const pendingFocusNodeIdRef = useRef<string | null>(null);
   const overlayCloseButtonRef = useRef<HTMLButtonElement | null>(null);
-  const pendingGraphNodeIdsRef = useRef<Set<string>>(new Set());
+  const pendingGraphNodeIdsRef = useRef<Map<string, { treeId: string; parentId: string | null }>>(new Map());
   const lastSelectedNodeRef = useRef<Map<string, string>>(new Map());
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
 
@@ -273,9 +273,17 @@ export default function Home() {
     await refreshGraph(activeTreeId);
   }, [activeTreeId, activeNodeId, activeNode, handleDeleteTree, refreshGraph]);
 
-  const handlePendingUserMessage = useCallback(
-    ({ id, parentId, content, treeId }: { id: string; parentId: string | null; content: string; treeId: string }) => {
-      pendingGraphNodeIdsRef.current.add(id);
+  type PendingUserMessage = { id: string; parentId: string | null; content: string; treeId: string };
+  type AfterSendPayload = {
+    assistantId: string;
+    treeId: string;
+    parentId: string | null;
+    pendingUserId: string;
+    userId: string | null;
+  };
+
+  const handlePendingUserMessage = useCallback(({ id, parentId, content, treeId }: PendingUserMessage) => {
+      pendingGraphNodeIdsRef.current.set(id, { treeId, parentId });
       setGraph((prev) => {
         const nodeExists = prev.nodes.some((node) => node.id === id);
         if (nodeExists) return prev;
@@ -306,13 +314,7 @@ export default function Home() {
 
         return { nodes: nextNodes, edges: nextEdges };
       });
-
-      if (treeId === activeTreeId || !activeTreeId) {
-        setActiveNodeId(id);
-      }
-    },
-    [activeTreeId]
-  );
+    }, []);
 
   const handlePendingUserMessageFailed = useCallback(({ id, parentId }: { id: string; parentId: string | null }) => {
     pendingGraphNodeIdsRef.current.delete(id);
@@ -352,14 +354,30 @@ export default function Home() {
   );
 
   const handleAfterSend = useCallback(
-    (newAssistantId: string) => {
-      setActiveNodeId(newAssistantId);
-      if (blankTreeId === activeTreeId) {
+    ({ treeId, pendingUserId }: AfterSendPayload) => {
+      pendingGraphNodeIdsRef.current.delete(pendingUserId);
+
+      if (blankTreeId === treeId) {
         setBlankTreeId(null);
       }
-      if (activeTreeId) {
-        refreshGraph(activeTreeId);
+
+      if (treeId !== activeTreeId) {
+        return;
       }
+
+      setGraph((prev) => {
+        const hasPending = prev.nodes.some((node) => node.id === pendingUserId);
+        if (!hasPending) {
+          return prev;
+        }
+        const nextNodes = prev.nodes.filter((node) => node.id !== pendingUserId);
+        const nextEdges = prev.edges.filter(
+          (edge) => edge.source !== pendingUserId && edge.target !== pendingUserId
+        );
+        return { nodes: nextNodes, edges: nextEdges };
+      });
+
+      void refreshGraph(treeId);
     },
     [activeTreeId, blankTreeId, refreshGraph]
   );

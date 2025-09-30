@@ -11,11 +11,19 @@ type MarkdownCodeProps = {
   [key: string]: unknown;
 };
 
+type AfterSendPayload = {
+  assistantId: string;
+  treeId: string;
+  parentId: string | null;
+  pendingUserId: string;
+  userId: string | null;
+};
+
 type Props = {
   activeNodeId: string | null;
   treeId: string | null;
   defaultParentId?: string | null;
-  onAfterSend: (assistantId: string) => void;
+  onAfterSend: (payload: AfterSendPayload) => void;
   onDeleteNode?: () => void;
   isDeleteDisabled?: boolean;
   showEmptyOverlay?: boolean;
@@ -34,6 +42,14 @@ type Props = {
 };
 
 type DisplayMessage = PathResponse['path'][number] & { id?: string; pending?: boolean };
+
+type MessageOut = {
+  id: string;
+  tree_id: string;
+  parent_id?: string | null;
+  role: string;
+  content: string;
+};
 
 export default function ChatPane({
   activeNodeId,
@@ -154,7 +170,7 @@ export default function ChatPane({
     }
 
     try {
-      const res = await fetchJSON<any>(`/api/messages`, {
+      const res = await fetchJSON<MessageOut>(`/api/messages`, {
         method: 'POST',
         body: JSON.stringify({
           tree_id: targetTreeId,
@@ -162,7 +178,34 @@ export default function ChatPane({
           content: trimmed,
         }),
       });
-      onAfterSend(res.id);
+      setPath((prev) =>
+        prev.map((msg) => {
+          if (msg.id === userPendingId) {
+            return {
+              ...msg,
+              pending: false,
+              id: res.parent_id ?? msg.id,
+            };
+          }
+          if (msg.id === assistantPendingId) {
+            return {
+              ...msg,
+              pending: false,
+              id: res.id,
+              content: res.content,
+            };
+          }
+          return msg;
+        })
+      );
+      setIsSending(false);
+      onAfterSend({
+        assistantId: res.id,
+        treeId: res.tree_id,
+        parentId: parent,
+        pendingUserId: userPendingId,
+        userId: res.parent_id ?? null,
+      });
     } catch (err) {
       console.error('Failed to send message', err);
       setPath((prev) => prev.filter((msg) => msg.id !== userPendingId && msg.id !== assistantPendingId));
