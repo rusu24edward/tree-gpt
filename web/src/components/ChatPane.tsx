@@ -366,6 +366,9 @@ export default function ChatPane({
           display: flex;
           flex-direction: column;
           gap: 16px;
+          max-width: 940px;
+          width: 100%;
+          box-sizing: border-box;
         }
         .start-banner {
           text-align: center;
@@ -391,6 +394,9 @@ export default function ChatPane({
           display: flex;
           flex-direction: column;
           gap: 8px;
+          max-width: 840px;
+          width: 100%;
+          box-sizing: border-box;
         }
         .bubble.pending {
           opacity: 0.85;
@@ -410,14 +416,18 @@ export default function ChatPane({
         }
         .content {
           line-height: 1.6;
+          overflow: hidden;
+          word-break: break-word;
         }
         .markdown {
           display: flex;
           flex-direction: column;
           gap: 12px;
+          overflow: hidden;
         }
         .markdown :global(p) {
           margin: 0;
+          overflow-wrap: break-word;
         }
         .markdown :global(p + p) {
           margin-top: 12px;
@@ -467,6 +477,8 @@ export default function ChatPane({
           display: block;
           padding: 0;
           background: transparent;
+          white-space: pre-wrap;
+          word-break: break-word;
         }
         .markdown :global(blockquote) {
           margin: 0;
@@ -485,6 +497,14 @@ export default function ChatPane({
         }
         .code-block pre {
           padding: 14px;
+          white-space: pre-wrap;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+        }
+        .code-block code {
+          white-space: inherit;
+          word-break: inherit;
+          overflow-wrap: inherit;
         }
         .copy-row {
           display: flex;
