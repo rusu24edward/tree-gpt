@@ -47,9 +47,11 @@ export default function ChatPane({
   const [path, setPath] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [justCopiedId, setJustCopiedId] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTargetRef = useRef<string | null>(null);
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const effectiveNodeId = useMemo(
     () => activeNodeId ?? defaultParentId ?? null,
@@ -105,6 +107,15 @@ export default function ChatPane({
       }
     });
   }, [treeId, effectiveNodeId, savedScrollTop, onScrollPositionChange]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) {
+        clearTimeout(copyResetRef.current);
+        copyResetRef.current = null;
+      }
+    };
+  }, []);
 
   async function send() {
     if (isSending) return;
@@ -177,6 +188,22 @@ export default function ChatPane({
     }
   };
 
+  const handleCopy = async (id: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setJustCopiedId(id);
+      if (copyResetRef.current) {
+        clearTimeout(copyResetRef.current);
+      }
+      copyResetRef.current = setTimeout(() => {
+        setJustCopiedId((current) => (current === id ? null : current));
+        copyResetRef.current = null;
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy message', err);
+    }
+  };
+
   return (
     <div className="pane">
       <div className="toolbar">
@@ -218,6 +245,18 @@ export default function ChatPane({
                   {m.content}
                 </ReactMarkdown>
               )}
+            </div>
+            <div className="copy-row">
+              <button
+                type="button"
+                className="copy-button"
+                onClick={() => handleCopy(m.id ?? `message-${idx}`, m.content ?? '')}
+                disabled={m.pending && m.role === 'assistant' && (!m.content || m.content.trim().length === 0)}
+                aria-label="Copy message"
+                title="Copy message"
+              >
+                <span aria-hidden>{justCopiedId === (m.id ?? `message-${idx}`) ? '✅' : '📋'}</span>
+              </button>
             </div>
           </div>
         ))}
@@ -383,6 +422,31 @@ export default function ChatPane({
           padding-left: 12px;
           border-left: 3px solid #565869;
           color: #c5c5d2;
+        }
+        .copy-row {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 6px;
+        }
+        .copy-button {
+          border: none;
+          background: rgba(64, 65, 79, 0.35);
+          color: #c5c5d2;
+          border-radius: 8px;
+          font-size: 16px;
+          padding: 4px 8px;
+          line-height: 1;
+          cursor: pointer;
+          transition: background 0.18s ease, transform 0.18s ease, color 0.18s ease;
+        }
+        .copy-button:hover:enabled {
+          background: rgba(64, 65, 79, 0.55);
+          color: #ececf1;
+          transform: translateY(-1px);
+        }
+        .copy-button:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
         }
         .loading {
           display: flex;
