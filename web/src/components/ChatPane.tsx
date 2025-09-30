@@ -22,6 +22,8 @@ type Props = {
     treeId: string;
   }) => void;
   onPendingUserMessageFailed?: (payload: { id: string; parentId: string | null }) => void;
+  savedScrollTop?: number | null;
+  onScrollPositionChange?: (scrollTop: number | null) => void;
 };
 
 type DisplayMessage = PathResponse['path'][number] & { id?: string; pending?: boolean };
@@ -39,11 +41,15 @@ export default function ChatPane({
   focusComposerToken,
   onPendingUserMessage,
   onPendingUserMessageFailed,
+  savedScrollTop,
+  onScrollPositionChange,
 }: Props) {
   const [path, setPath] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastScrollTargetRef = useRef<string | null>(null);
 
   const effectiveNodeId = useMemo(
     () => activeNodeId ?? defaultParentId ?? null,
@@ -80,6 +86,25 @@ export default function ChatPane({
       node.setSelectionRange(node.value.length, node.value.length);
     });
   }, [focusComposerToken]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const scrollTarget = `${treeId ?? '__no_tree__'}:${effectiveNodeId ?? '__root__'}`;
+    const previousTarget = lastScrollTargetRef.current;
+    if (scrollTarget === previousTarget) return;
+    lastScrollTargetRef.current = scrollTarget;
+
+    requestAnimationFrame(() => {
+      const node = scrollContainerRef.current;
+      if (!node) return;
+      if (typeof savedScrollTop === 'number') {
+        node.scrollTop = savedScrollTop;
+      } else {
+        node.scrollTop = node.scrollHeight;
+      }
+    });
+  }, [treeId, effectiveNodeId, savedScrollTop, onScrollPositionChange]);
 
   async function send() {
     if (isSending) return;
@@ -140,6 +165,18 @@ export default function ChatPane({
     }
   };
 
+  const handleScroll = () => {
+    if (!onScrollPositionChange) return;
+    const node = scrollContainerRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.clientHeight - node.scrollTop;
+    if (Math.abs(distanceFromBottom) <= 2) {
+      onScrollPositionChange(null);
+    } else {
+      onScrollPositionChange(node.scrollTop);
+    }
+  };
+
   return (
     <div className="pane">
       <div className="toolbar">
@@ -156,7 +193,7 @@ export default function ChatPane({
         )}
       </div>
 
-      <div className="scroll">
+      <div className="scroll" ref={scrollContainerRef} onScroll={handleScroll}>
         {showStartPrompt && (
           <div className="start-banner">Start chatting to get started</div>
         )}

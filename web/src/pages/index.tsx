@@ -22,6 +22,7 @@ export default function Home() {
   const pendingFocusNodeIdRef = useRef<string | null>(null);
   const overlayCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const pendingGraphNodeIdsRef = useRef<Set<string>>(new Set());
+  const scrollPositionsRef = useRef<Map<string, number>>(new Map());
 
   const hasMessages = graph.nodes.length > 0;
   const rootId = useMemo(() => graph.nodes.find((n) => !n.parent_id)?.id ?? null, [graph]);
@@ -203,6 +204,11 @@ export default function Home() {
       setPendingTreeId(treeId);
       try {
         await fetchJSON(`/api/trees/${treeId}`, { method: 'DELETE' });
+        scrollPositionsRef.current.forEach((_, key) => {
+          if (key.startsWith(`${treeId}:`)) {
+            scrollPositionsRef.current.delete(key);
+          }
+        });
         const wasActive = treeId === activeTreeId;
         const wasEditing = treeId === editingTreeId;
         if (blankTreeId === treeId) {
@@ -297,6 +303,24 @@ export default function Home() {
       return parentId ?? null;
     });
   }, []);
+
+  const effectiveScrollNodeId = useMemo(() => activeNodeId ?? rootId ?? null, [activeNodeId, rootId]);
+  const currentScrollKey = useMemo(() => {
+    if (!activeTreeId) return null;
+    return `${activeTreeId}:${effectiveScrollNodeId ?? '__root__'}`;
+  }, [activeTreeId, effectiveScrollNodeId]);
+  const savedScrollTop = currentScrollKey ? scrollPositionsRef.current.get(currentScrollKey) ?? null : null;
+  const handleScrollPositionChange = useCallback(
+    (scrollTop: number | null) => {
+      if (!currentScrollKey) return;
+      if (scrollTop === null) {
+        scrollPositionsRef.current.delete(currentScrollKey);
+      } else {
+        scrollPositionsRef.current.set(currentScrollKey, scrollTop);
+      }
+    },
+    [currentScrollKey]
+  );
 
   const handleAfterSend = useCallback(
     (newAssistantId: string) => {
@@ -552,6 +576,8 @@ export default function Home() {
             focusComposerToken={composerFocusToken}
             onPendingUserMessage={handlePendingUserMessage}
             onPendingUserMessageFailed={handlePendingUserMessageFailed}
+            savedScrollTop={savedScrollTop}
+            onScrollPositionChange={handleScrollPositionChange}
           />
         </div>
 
