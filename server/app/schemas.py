@@ -35,6 +35,7 @@ class GraphNode(BaseModel):
     parent_id: Optional[str] = None
     user_label: Optional[str] = None
     assistant_label: Optional[str] = None
+    created_at: Optional[str] = None
 
 class GraphEdge(BaseModel):
     id: str

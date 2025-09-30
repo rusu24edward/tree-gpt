@@ -4,6 +4,13 @@ import remarkGfm from 'remark-gfm';
 import type { PathResponse } from '../lib/api';
 import { fetchJSON } from '../lib/api';
 
+type MarkdownCodeProps = {
+  inline?: boolean;
+  className?: string;
+  children?: React.ReactNode[];
+  [key: string]: unknown;
+};
+
 type Props = {
   activeNodeId: string | null;
   treeId: string | null;
@@ -251,10 +258,12 @@ export default function ChatPane({
                     className="markdown"
                     remarkPlugins={[remarkGfm]}
                     components={{
-                      code({ inline, className, children, ...props }) {
+                      code(componentProps) {
+                        const { inline, className, children, ...props } = componentProps as MarkdownCodeProps;
+                        const restProps = props as Record<string, unknown>;
                         if (inline) {
                           return (
-                            <code className={className} {...props}>
+                            <code className={className} {...restProps}>
                               {children}
                             </code>
                           );
@@ -264,7 +273,7 @@ export default function ChatPane({
                         const rawCode = String(children).replace(/\n$/, '');
                         return (
                           <div className="code-block">
-                            <pre className={className} {...props}>
+                            <pre className={className} {...restProps}>
                               <code>{children}</code>
                             </pre>
                             <div className="copy-row">

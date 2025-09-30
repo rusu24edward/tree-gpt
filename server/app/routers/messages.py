@@ -60,6 +60,7 @@ def get_graph(tree_id: UUID, db: Session = Depends(get_db)):
             "parent_id": parent_id,
             "user_label": None,
             "assistant_label": label,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         nodes.append(node)
         add_edge(parent_id, str(m.id))
@@ -91,6 +92,7 @@ def get_graph(tree_id: UUID, db: Session = Depends(get_db)):
             "parent_id": parent_id,
             "user_label": user_excerpt,
             "assistant_label": assistant_excerpt,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         nodes.append(node)
         add_edge(parent_id, str(m.id))
@@ -109,6 +111,7 @@ def get_graph(tree_id: UUID, db: Session = Depends(get_db)):
             "parent_id": parent_id,
             "user_label": user_excerpt,
             "assistant_label": None,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         nodes.append(node)
         add_edge(parent_id, str(m.id))

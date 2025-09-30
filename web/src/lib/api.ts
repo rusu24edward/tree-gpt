@@ -19,6 +19,7 @@ export type GraphNode = {
   parent_id?: string | null;
   user_label?: string | null;
   assistant_label?: string | null;
+  created_at?: string | null;
 };
 export type GraphEdge = { id: string; source: string; target: string };
 export type GraphResponse = { nodes: GraphNode[]; edges: GraphEdge[] };

@@ -22,6 +22,7 @@ export default function Home() {
   const pendingFocusNodeIdRef = useRef<string | null>(null);
   const overlayCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const pendingGraphNodeIdsRef = useRef<Set<string>>(new Set());
+  const lastSelectedNodeRef = useRef<Map<string, string>>(new Map());
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
 
   const hasMessages = graph.nodes.length > 0;
@@ -65,6 +66,21 @@ export default function Home() {
         setGraph(data);
         pendingGraphNodeIdsRef.current.clear();
         const root = data.nodes.find((n) => !n.parent_id)?.id ?? null;
+        const remembered = lastSelectedNodeRef.current.get(treeId) ?? null;
+        const latestNodeId = (() => {
+          let selected: string | null = null;
+          let latestTs = -Infinity;
+          data.nodes.forEach((node) => {
+            if (!node.created_at) return;
+            const ts = Date.parse(node.created_at);
+            if (Number.isNaN(ts)) return;
+            if (ts >= latestTs) {
+              latestTs = ts;
+              selected = node.id;
+            }
+          });
+          return selected;
+        })();
         const focusId = opts?.focusNodeId ?? null;
         const shouldSelectRoot = Boolean(opts?.selectRoot);
         const shouldFocusComposer = opts?.focusComposer ?? false;
@@ -73,11 +89,12 @@ export default function Home() {
           if (focusId && data.nodes.some((n) => n.id === focusId)) {
             return focusId;
           }
+          const defaultNodeId = remembered && data.nodes.some((n) => n.id === remembered) ? remembered : latestNodeId ?? root;
           if (shouldSelectRoot) {
-            return root;
+            return defaultNodeId;
           }
-          if (!prev) return root;
-          return data.nodes.some((n) => n.id === prev) ? prev : root;
+          if (!prev) return defaultNodeId;
+          return data.nodes.some((n) => n.id === prev) ? prev : defaultNodeId;
         });
 
         if (data.nodes.length === 0) {
@@ -105,7 +122,12 @@ export default function Home() {
       return;
     }
     const focusId = pendingFocusNodeIdRef.current;
-    const opts = focusId ? { focusNodeId: focusId } : { selectRoot: true, focusComposer: true };
+    const remembered = lastSelectedNodeRef.current.get(activeTreeId) ?? null;
+    const opts = focusId
+      ? { focusNodeId: focusId }
+      : remembered
+      ? { focusNodeId: remembered }
+      : { selectRoot: true, focusComposer: true };
     pendingFocusNodeIdRef.current = null;
     void refreshGraph(activeTreeId, opts);
   }, [activeTreeId, refreshGraph]);
@@ -209,6 +231,7 @@ export default function Home() {
             scrollPositionsRef.current.delete(key);
           }
         });
+        lastSelectedNodeRef.current.delete(treeId);
         const wasActive = treeId === activeTreeId;
         const wasEditing = treeId === editingTreeId;
         if (blankTreeId === treeId) {
@@ -303,6 +326,12 @@ export default function Home() {
       return parentId ?? null;
     });
   }, []);
+
+  useEffect(() => {
+    if (activeTreeId && activeNodeId) {
+      lastSelectedNodeRef.current.set(activeTreeId, activeNodeId);
+    }
+  }, [activeTreeId, activeNodeId]);
 
   const effectiveScrollNodeId = useMemo(() => activeNodeId ?? rootId ?? null, [activeNodeId, rootId]);
   const currentScrollKey = useMemo(() => {
