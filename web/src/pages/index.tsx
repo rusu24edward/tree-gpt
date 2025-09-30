@@ -686,9 +686,10 @@ export default function Home() {
         .app {
           display: grid;
           grid-template-rows: 72px 1fr 52px;
-          height: 100vh;
+          height: 100dvh;
           background: #343541;
           color: #ececf1;
+          overflow: hidden;
         }
         header {
           display: flex;
@@ -742,6 +743,7 @@ export default function Home() {
           padding: 28px 36px;
           min-height: 0;
           position: relative;
+          overflow: hidden;
         }
         aside.trees,
         .graph,
@@ -1057,6 +1059,19 @@ export default function Home() {
           border-top: 1px solid #565869;
           color: #8e8ea0;
           font-size: 12px;
+        }
+      `}</style>
+      <style jsx global>{`
+        html,
+        body,
+        #__next {
+          height: 100%;
+          margin: 0;
+          background: #343541;
+          overflow: hidden;
+        }
+        body {
+          font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
       `}</style>
     </div>
