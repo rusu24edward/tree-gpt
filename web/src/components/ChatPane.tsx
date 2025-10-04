@@ -65,6 +65,7 @@ export default function ChatPane({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTargetRef = useRef<string | null>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const baseAutoScrollNodeRef = useRef<'__initial__' | '__none__'>('__initial__');
   const pathStoreRef = useRef<Map<string, DisplayMessage[]>>(new Map());
   const [pathSnapshot, setPathSnapshot] = useState<DisplayMessage[]>([]);
   const activeKeyRef = useRef<string>('');
@@ -184,8 +185,9 @@ export default function ChatPane({
       if (!node) return;
       if (typeof savedScrollTop === 'number') {
         node.scrollTop = savedScrollTop;
-      } else {
+      } else if (baseAutoScrollNodeRef.current === '__initial__') {
         node.scrollTop = node.scrollHeight;
+        baseAutoScrollNodeRef.current = '__none__';
       }
     });
   }, [treeId, effectiveNodeId, savedScrollTop, onScrollPositionChange]);

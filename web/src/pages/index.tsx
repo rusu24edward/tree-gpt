@@ -26,6 +26,7 @@ export default function Home() {
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
   const [unreadMap, setUnreadMap] = useState<Map<string, Set<string>>>(() => new Map());
   const activeTreeIdRef = useRef<string | null>(null);
+  const activeNodeIdRef = useRef<string | null>(null);
   const blankTreeIdRef = useRef<string | null>(null);
 
   const hasMessages = graph.nodes.length > 0;
@@ -62,6 +63,10 @@ export default function Home() {
   useEffect(() => {
     blankTreeIdRef.current = blankTreeId;
   }, [blankTreeId]);
+
+  useEffect(() => {
+    activeNodeIdRef.current = activeNodeId;
+  }, [activeNodeId]);
 
   const markNodeUnread = useCallback((treeId: string, nodeId: string) => {
     if (!treeId || !nodeId) return;
@@ -443,7 +448,7 @@ export default function Home() {
   );
 
   const handleAfterSend = useCallback(
-    ({ assistantId, treeId, pendingUserId }: AfterSendPayload) => {
+    ({ assistantId, treeId, pendingUserId, userId: payloadUserId }: AfterSendPayload) => {
       pendingGraphNodeIdsRef.current.delete(pendingUserId);
 
       markNodeUnread(treeId, assistantId);
@@ -452,11 +457,19 @@ export default function Home() {
         setBlankTreeId(null);
       }
 
-      if (treeId !== activeTreeIdRef.current) {
+      const isActiveTree = treeId === activeTreeIdRef.current;
+      const currentActiveNode = activeNodeIdRef.current;
+      const shouldSelectAssistant =
+        isActiveTree &&
+        (currentActiveNode === pendingUserId || (payloadUserId && currentActiveNode === payloadUserId));
+
+      if (!isActiveTree) {
         return;
       }
 
-      setActiveNodeId(assistantId);
+      if (shouldSelectAssistant) {
+        setActiveNodeId(assistantId);
+      }
 
       setGraph((prev) => {
         const hasPending = prev.nodes.some((node) => node.id === pendingUserId);
@@ -470,7 +483,7 @@ export default function Home() {
         return { nodes: nextNodes, edges: nextEdges };
       });
 
-      void refreshGraph(treeId);
+      void refreshGraph(treeId, shouldSelectAssistant ? { focusNodeId: assistantId } : undefined);
     },
     [markNodeUnread, refreshGraph]
   );
