@@ -1,10 +1,13 @@
-from typing import Dict, List, Optional
+import json
+import time
+from typing import Dict, List, Optional, Iterator
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import schemas, crud, models
-from ..services.llm import build_messages, complete
+from ..services.llm import build_messages, complete, stream_complete, client as llm_client
 from ..services.summarizer import maybe_summarize
 
 router = APIRouter(prefix="/messages", tags=["messages"])
@@ -162,6 +165,83 @@ def post_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
         parent_id=user_msg.id,
     )
     return asst
+
+
+def _encode_event(payload: Dict) -> bytes:
+    return (json.dumps(payload) + "\n").encode("utf-8")
+
+
+@router.post("/stream")
+def post_message_stream(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
+    parent_id = payload.parent_id
+    if parent_id is None:
+        root = crud.get_root_message(db, payload.tree_id)
+        if root:
+            parent_id = root.id
+
+    user_msg = crud.create_message(
+        db,
+        tree_id=payload.tree_id,
+        role="user",
+        content=payload.content,
+        parent_id=parent_id,
+    )
+
+    rows = crud.get_path_to_root(db, user_msg.id)
+    path_msgs = [{"role": r["role"], "content": r["content"]} for r in rows]
+    path_msgs = maybe_summarize(path_msgs, max_keep=20)
+    messages = build_messages(path_msgs)
+
+    def stream_tokens() -> Iterator[bytes]:
+        buffer: List[str] = []
+        finished = False
+
+        yield _encode_event(
+            {
+                "type": "start",
+                "tree_id": str(user_msg.tree_id),
+                "user_id": str(user_msg.id),
+                "parent_id": str(parent_id) if parent_id else None,
+            }
+        )
+
+        try:
+            for token in stream_complete(messages):
+                if not token:
+                    continue
+                buffer.append(token)
+                yield _encode_event({"type": "token", "delta": token})
+                if llm_client is None:
+                    time.sleep(0.02)
+
+            final_content = "".join(buffer).strip()
+            assistant = crud.create_message(
+                db,
+                tree_id=user_msg.tree_id,
+                role="assistant",
+                content=final_content,
+                parent_id=user_msg.id,
+            )
+            finished = True
+            yield _encode_event(
+                {
+                    "type": "end",
+                    "assistant_id": str(assistant.id),
+                    "tree_id": str(assistant.tree_id),
+                    "content": assistant.content,
+                    "parent_id": str(user_msg.id),
+                }
+            )
+        except GeneratorExit:
+            return
+        except Exception as exc:  # pragma: no cover - defensive
+            yield _encode_event({"type": "error", "message": str(exc)})
+            raise
+        finally:
+            if not finished:
+                db.rollback()
+
+    return StreamingResponse(stream_tokens(), media_type="application/jsonl")
 
 @router.post("/branch/{message_id}/fork", response_model=schemas.BranchForkResponse)
 def fork_branch(message_id: UUID, db: Session = Depends(get_db)):

@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { PathResponse } from '../lib/api';
-import { fetchJSON } from '../lib/api';
+import { fetchJSON, API_BASE } from '../lib/api';
 
 type MarkdownCodeProps = {
   inline?: boolean;
@@ -43,14 +43,6 @@ type Props = {
 
 type DisplayMessage = PathResponse['path'][number] & { id?: string; pending?: boolean };
 
-type MessageOut = {
-  id: string;
-  tree_id: string;
-  parent_id?: string | null;
-  role: string;
-  content: string;
-};
-
 export default function ChatPane({
   activeNodeId,
   treeId,
@@ -67,40 +59,107 @@ export default function ChatPane({
   savedScrollTop,
   onScrollPositionChange,
 }: Props) {
-  const [path, setPath] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const [justCopiedId, setJustCopiedId] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTargetRef = useRef<string | null>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pathStoreRef = useRef<Map<string, DisplayMessage[]>>(new Map());
+  const [pathSnapshot, setPathSnapshot] = useState<DisplayMessage[]>([]);
+  const activeKeyRef = useRef<string>('');
+  const sendingKeysRef = useRef<Set<string>>(new Set());
+  const [sendingVersion, setSendingVersion] = useState(0);
+  const streamSessionsRef = useRef<
+    Map<
+      string,
+      {
+        controller: AbortController;
+        pendingAssistantId: string;
+        assistantId: string | null;
+        content: string;
+        userId: string | null;
+        active: boolean;
+      }
+    >
+  >(new Map());
+  const [streamVersion, setStreamVersion] = useState(0);
 
   const effectiveNodeId = useMemo(
     () => activeNodeId ?? defaultParentId ?? null,
     [activeNodeId, defaultParentId]
   );
 
-  const showStartPrompt = Boolean(showEmptyOverlay && path.length === 0);
+  const computeKey = useCallback((maybeTreeId: string | null, nodeId: string | null) => {
+    return `${maybeTreeId ?? '__no_tree__'}:${nodeId ?? '__root__'}`;
+  }, []);
+
+  const currentKey = computeKey(treeId, effectiveNodeId);
 
   useEffect(() => {
-    async function load() {
-      if (effectiveNodeId) {
-        const p = await fetchJSON<PathResponse>(`/api/messages/path/${effectiveNodeId}`);
-        const shaped = p.path.map((msg, idx) => ({
-          ...msg,
-          pending: false,
-          id: `${msg.role}-${idx}`,
-        }));
-        setPath(shaped);
-        setIsSending(false);
-      } else {
-        setPath([]);
-        setIsSending(false);
+    activeKeyRef.current = currentKey;
+    const cached = pathStoreRef.current.get(currentKey) ?? [];
+    setPathSnapshot(cached);
+    setSendingVersion((prev) => prev + 1);
+  }, [currentKey]);
+
+  const showStartPrompt = Boolean(showEmptyOverlay && pathSnapshot.length === 0);
+
+  const isSending = useMemo(() => sendingKeysRef.current.has(currentKey), [currentKey, sendingVersion]);
+
+  const updatePathForKey = useCallback(
+    (key: string, updater: (current: DisplayMessage[]) => DisplayMessage[]) => {
+      const current = pathStoreRef.current.get(key) ?? [];
+      const next = updater(current);
+      pathStoreRef.current.set(key, next);
+      if (key === activeKeyRef.current) {
+        setPathSnapshot(next);
       }
-    }
-    load();
-  }, [effectiveNodeId]);
+      return next;
+    },
+    []
+  );
+
+  const loadPath = useCallback(
+    async (targetKey: string, nodeId: string | null) => {
+      if (!nodeId) {
+        pathStoreRef.current.set(targetKey, []);
+        if (targetKey === activeKeyRef.current) {
+          setPathSnapshot([]);
+        }
+        sendingKeysRef.current.delete(targetKey);
+        setSendingVersion((prev) => prev + 1);
+        return;
+      }
+      const existing = pathStoreRef.current.get(targetKey);
+      if (existing) {
+        if (targetKey === activeKeyRef.current) {
+          setPathSnapshot(existing);
+        }
+        return;
+      }
+      const response = await fetchJSON<PathResponse>(`/api/messages/path/${nodeId}`);
+      const shaped = response.path.map((msg, idx) => ({
+        ...msg,
+        pending: false,
+        id: `${msg.role}-${idx}`,
+      }));
+      pathStoreRef.current.set(targetKey, shaped);
+      if (targetKey === activeKeyRef.current) {
+        setPathSnapshot(shaped);
+      }
+      sendingKeysRef.current.delete(targetKey);
+      setSendingVersion((prev) => prev + 1);
+    },
+    []
+  );
+
+  useEffect(() => {
+    void loadPath(currentKey, effectiveNodeId);
+  }, [currentKey, effectiveNodeId, loadPath]);
+
+  const activeStream = useMemo(() => streamSessionsRef.current.get(currentKey) ?? null, [currentKey, streamVersion]);
+  const isStreaming = Boolean(activeStream?.active);
 
   useEffect(() => {
     if (!focusComposerToken) return;
@@ -152,70 +211,233 @@ export default function ChatPane({
     if (!targetTreeId) return;
 
     const parent = activeNodeId ?? defaultParentId ?? null;
+    const baseNodeId = effectiveNodeId;
 
     const stamp = Date.now().toString(36);
     const userPendingId = `pending-user-${stamp}`;
     const assistantPendingId = `pending-assistant-${stamp}`;
 
-    setIsSending(true);
-    setPath((prev) => [
-      ...prev,
+    const baseKey = computeKey(targetTreeId, baseNodeId);
+    const basePath = pathStoreRef.current.get(baseKey) ?? (baseKey === currentKey ? pathSnapshot : []);
+    const initialPath: DisplayMessage[] = [
+      ...basePath.map((msg) => ({ ...msg })),
       { role: 'user', content: trimmed, pending: true, id: userPendingId },
       { role: 'assistant', content: '', pending: true, id: assistantPendingId },
-    ]);
+    ];
+
+    const pendingKey = computeKey(targetTreeId, userPendingId);
+    pathStoreRef.current.set(pendingKey, initialPath);
+    sendingKeysRef.current.add(pendingKey);
+    setSendingVersion((prev) => prev + 1);
     setInput('');
 
     if (onPendingUserMessage) {
       onPendingUserMessage({ id: userPendingId, parentId: parent, content: trimmed, treeId: targetTreeId });
     }
 
+    const controller = new AbortController();
+    streamSessionsRef.current.set(pendingKey, {
+      controller,
+      pendingAssistantId: assistantPendingId,
+      assistantId: null,
+      content: '',
+      userId: null,
+      active: true,
+    });
+    setStreamVersion((prev) => prev + 1);
+
+    let streamKey = pendingKey;
+
+    const migrateStreamKey = (nextKey: string) => {
+      if (nextKey === streamKey) return;
+      const currentPath = pathStoreRef.current.get(streamKey) ?? [];
+      pathStoreRef.current.set(nextKey, currentPath);
+      pathStoreRef.current.delete(streamKey);
+      if (sendingKeysRef.current.delete(streamKey)) {
+        sendingKeysRef.current.add(nextKey);
+      }
+      const session = streamSessionsRef.current.get(streamKey);
+      if (session) {
+        streamSessionsRef.current.delete(streamKey);
+        streamSessionsRef.current.set(nextKey, session);
+      }
+      if (activeKeyRef.current === streamKey) {
+        activeKeyRef.current = nextKey;
+        setPathSnapshot(currentPath);
+      }
+      streamKey = nextKey;
+    };
+
+    const updateStreamPath = (updater: (current: DisplayMessage[]) => DisplayMessage[]) => {
+      updatePathForKey(streamKey, updater);
+    };
+
     try {
-      const res = await fetchJSON<MessageOut>(`/api/messages`, {
+      const response = await fetch(`${API_BASE}/api/messages/stream`, {
         method: 'POST',
         body: JSON.stringify({
           tree_id: targetTreeId,
           parent_id: parent,
           content: trimmed,
         }),
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
       });
-      setPath((prev) =>
-        prev.map((msg) => {
-          if (msg.id === userPendingId) {
-            return {
-              ...msg,
-              pending: false,
-              id: res.parent_id ?? msg.id,
-            };
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Stream request failed: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalAssistantId: string | null = null;
+      let finalContent = '';
+      let serverUserId: string | null = null;
+
+      const processLine = (line: string) => {
+        if (!line) return;
+        try {
+          const payload = JSON.parse(line);
+          if (payload.type === 'start') {
+            serverUserId = payload.user_id ?? null;
+            updateStreamPath((prev) =>
+              prev.map((msg) => {
+                if (msg.id === userPendingId) {
+                  return {
+                    ...msg,
+                    id: serverUserId ?? msg.id,
+                    pending: false,
+                  };
+                }
+                return msg;
+              })
+            );
+            const current = streamSessionsRef.current.get(streamKey);
+            if (current) {
+              current.userId = serverUserId;
+            }
+            setStreamVersion((prev) => prev + 1);
+          } else if (payload.type === 'token') {
+            const delta = typeof payload.delta === 'string' ? payload.delta : '';
+            const session = streamSessionsRef.current.get(streamKey);
+            if (session) {
+              session.content += delta;
+            }
+            updateStreamPath((prev) =>
+              prev.map((msg) => {
+                if (msg.id === assistantPendingId) {
+                  return {
+                    ...msg,
+                    content: session?.content ?? delta,
+                    pending: true,
+                  };
+                }
+                return msg;
+              })
+            );
+          } else if (payload.type === 'end') {
+            finalAssistantId = payload.assistant_id ?? null;
+            finalContent = typeof payload.content === 'string' ? payload.content : '';
+            const session = streamSessionsRef.current.get(streamKey);
+            if (session) {
+              session.assistantId = finalAssistantId;
+              session.content = finalContent;
+              session.active = false;
+            }
+            updateStreamPath((prev) =>
+              prev.map((msg) => {
+                if (msg.id === assistantPendingId) {
+                  return {
+                    ...msg,
+                    id: finalAssistantId ?? msg.id,
+                    content: finalContent,
+                    pending: false,
+                  };
+                }
+                if (msg.id === userPendingId && serverUserId) {
+                  return { ...msg, id: serverUserId, pending: false };
+                }
+                return msg;
+              })
+            );
+            if (finalAssistantId) {
+              migrateStreamKey(computeKey(targetTreeId, finalAssistantId));
+            }
+          } else if (payload.type === 'error') {
+            const message = typeof payload.message === 'string' ? payload.message : 'Streaming error';
+            throw new Error(message);
           }
-          if (msg.id === assistantPendingId) {
-            return {
-              ...msg,
-              pending: false,
-              id: res.id,
-              content: res.content,
-            };
-          }
-          return msg;
-        })
-      );
-      setIsSending(false);
+        } catch (err) {
+          console.error('Failed to process stream line', err, line);
+          throw err;
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIndex = buffer.indexOf('\n');
+        while (newlineIndex >= 0) {
+          const raw = buffer.slice(0, newlineIndex).trim();
+          buffer = buffer.slice(newlineIndex + 1);
+          processLine(raw);
+          newlineIndex = buffer.indexOf('\n');
+        }
+      }
+
+      buffer += decoder.decode(new Uint8Array(), { stream: false });
+      const remainder = buffer.trim();
+      if (remainder.length > 0) {
+        processLine(remainder);
+      }
+
+      if (!finalAssistantId) {
+        throw new Error('Streaming ended without assistant response');
+      }
+
+      streamSessionsRef.current.delete(streamKey);
+      setStreamVersion((prev) => prev + 1);
+
+      sendingKeysRef.current.delete(streamKey);
+      setSendingVersion((prev) => prev + 1);
+
       onAfterSend({
-        assistantId: res.id,
-        treeId: res.tree_id,
+        assistantId: finalAssistantId,
+        treeId: targetTreeId,
         parentId: parent,
         pendingUserId: userPendingId,
-        userId: res.parent_id ?? null,
+        userId: serverUserId,
       });
     } catch (err) {
       console.error('Failed to send message', err);
-      setPath((prev) => prev.filter((msg) => msg.id !== userPendingId && msg.id !== assistantPendingId));
-      setInput(trimmed);
-      setIsSending(false);
-      if (onPendingUserMessageFailed) {
-        onPendingUserMessageFailed({ id: userPendingId, parentId: parent });
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        // Cancelled by user
+        updateStreamPath((prev) => prev.filter((msg) => msg.id !== assistantPendingId));
+        if (onPendingUserMessageFailed) {
+          onPendingUserMessageFailed({ id: userPendingId, parentId: parent });
+        }
+      } else {
+        updateStreamPath((prev) => prev.filter((msg) => msg.id !== userPendingId && msg.id !== assistantPendingId));
+        setInput(trimmed);
+        if (onPendingUserMessageFailed) {
+          onPendingUserMessageFailed({ id: userPendingId, parentId: parent });
+        }
       }
+      pathStoreRef.current.delete(streamKey);
+      streamSessionsRef.current.delete(streamKey);
+      setStreamVersion((prev) => prev + 1);
+      sendingKeysRef.current.delete(streamKey);
+      setSendingVersion((prev) => prev + 1);
     }
   }
+
+  const handleStopStream = () => {
+    const session = streamSessionsRef.current.get(currentKey);
+    if (!session) return;
+    session.controller.abort();
+  };
 
   const handleKeyDown = (evt: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (evt.key === 'Enter' && !evt.shiftKey) {
@@ -274,14 +496,17 @@ export default function ChatPane({
         {showStartPrompt && (
           <div className="start-banner">Start chatting to get started</div>
         )}
-        {path.length === 0 && !showStartPrompt && (
+        {pathSnapshot.length === 0 && !showStartPrompt && (
           <div className="placeholder">
             Select a node in the graph, or start typing to begin a new branch from here.
           </div>
         )}
-        {path.map((m, idx) => {
+        {pathSnapshot.map((m, idx) => {
           const messageId = m.id ?? `message-${idx}`;
           const isAssistantPending = m.pending && m.role === 'assistant' && (!m.content || m.content.trim().length === 0);
+          const isStreamingMessage = Boolean(
+            isStreaming && activeStream?.pendingAssistantId === messageId && activeStream?.active
+          );
 
           let blockIndex = 0;
 
@@ -297,46 +522,49 @@ export default function ChatPane({
                     <span className="loading-text">Awaiting response…</span>
                   </div>
                 ) : (
-                  <ReactMarkdown
-                    className="markdown"
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      code(componentProps) {
-                        const { inline, className, children, ...props } = componentProps as MarkdownCodeProps;
-                        const restProps = props as Record<string, unknown>;
-                        if (inline) {
+                  <div className="markdown-wrapper">
+                    <ReactMarkdown
+                      className="markdown"
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code(componentProps) {
+                          const { inline, className, children, ...props } = componentProps as MarkdownCodeProps;
+                          const restProps = props as Record<string, unknown>;
+                          if (inline) {
+                            return (
+                              <code className={className} {...restProps}>
+                                {children}
+                              </code>
+                            );
+                          }
+                          blockIndex += 1;
+                          const codeId = `${messageId}-code-${blockIndex}`;
+                          const rawCode = String(children).replace(/\n$/, '');
                           return (
-                            <code className={className} {...restProps}>
-                              {children}
-                            </code>
-                          );
-                        }
-                        blockIndex += 1;
-                        const codeId = `${messageId}-code-${blockIndex}`;
-                        const rawCode = String(children).replace(/\n$/, '');
-                        return (
-                          <div className="code-block">
-                            <pre className={className} {...restProps}>
-                              <code>{children}</code>
-                            </pre>
-                            <div className="copy-row">
-                              <button
-                                type="button"
-                                className="copy-button"
-                                onClick={() => handleCopy(codeId, rawCode)}
-                                aria-label="Copy code block"
-                                title="Copy code block"
-                              >
-                                <span aria-hidden>{justCopiedId === codeId ? '✅' : '📋'}</span>
-                              </button>
+                            <div className="code-block">
+                              <pre className={className} {...restProps}>
+                                <code>{children}</code>
+                              </pre>
+                              <div className="copy-row">
+                                <button
+                                  type="button"
+                                  className="copy-button"
+                                  onClick={() => handleCopy(codeId, rawCode)}
+                                  aria-label="Copy code block"
+                                  title="Copy code block"
+                                >
+                                  <span aria-hidden>{justCopiedId === codeId ? '✅' : '📋'}</span>
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      },
-                    }}
-                  >
-                    {m.content}
-                  </ReactMarkdown>
+                          );
+                        },
+                      }}
+                    >
+                      {m.content}
+                    </ReactMarkdown>
+                    {isStreamingMessage && <span className="stream-caret" aria-hidden />}
+                  </div>
                 )}
               </div>
               <div className="copy-row">
@@ -366,6 +594,11 @@ export default function ChatPane({
           ref={composerRef}
         />
         <div className="composer-actions">
+          {isStreaming && (
+            <button type="button" className="secondary" onClick={handleStopStream}>
+              Stop
+            </button>
+          )}
           <button onClick={() => void send()} disabled={isSending || input.trim().length === 0}>
             Send
           </button>
@@ -456,11 +689,17 @@ export default function ChatPane({
           overflow: hidden;
           word-break: break-word;
         }
+        .markdown-wrapper {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+        }
         .markdown {
           display: flex;
           flex-direction: column;
           gap: 12px;
           overflow: hidden;
+          flex: 1;
         }
         .markdown :global(p) {
           margin: 0;
@@ -574,6 +813,15 @@ export default function ChatPane({
           opacity: 0.4;
           cursor: not-allowed;
         }
+        .stream-caret {
+          display: inline-block;
+          align-self: stretch;
+          width: 2px;
+          background: #f7c948;
+          border-radius: 1px;
+          animation: blink 1s steps(1) infinite;
+          margin-top: 4px;
+        }
         .loading {
           display: flex;
           align-items: center;
@@ -618,6 +866,7 @@ export default function ChatPane({
         .composer-actions {
           display: flex;
           justify-content: flex-end;
+          gap: 8px;
         }
         button {
           border-radius: 999px;
@@ -638,6 +887,14 @@ export default function ChatPane({
           cursor: not-allowed;
           box-shadow: none;
         }
+        .composer-actions .secondary {
+          background: transparent;
+          border-color: #ececf1;
+          color: #ececf1;
+        }
+        .composer-actions .secondary:hover:enabled {
+          background: rgba(236, 236, 241, 0.12);
+        }
         .danger {
           background: #ef4146;
           border-color: #ef4146;
@@ -653,6 +910,16 @@ export default function ChatPane({
         @keyframes spin {
           to {
             transform: rotate(360deg);
+          }
+        }
+        @keyframes blink {
+          0%,
+          50% {
+            opacity: 1;
+          }
+          50.0001%,
+          100% {
+            opacity: 0;
           }
         }
       `}</style>

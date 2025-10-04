@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict
+from typing import List, Dict, Iterator
 from openai import OpenAI
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -28,3 +28,27 @@ def complete(messages: List[Dict]) -> str:
         temperature=0.2
     )
     return resp.choices[0].message.content
+
+
+def stream_complete(messages: List[Dict]) -> Iterator[str]:
+    if not client:
+        mock_reply = (
+            "[MOCK RESPONSE] I understood your request and this is a placeholder reply because "
+            "OPENAI_API_KEY is not set."
+        )
+        for token in mock_reply.split(" "):
+            yield token + " "
+        return
+
+    stream = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.2,
+        stream=True,
+    )
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta

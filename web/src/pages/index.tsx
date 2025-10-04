@@ -396,7 +396,11 @@ export default function Home() {
 
         return { nodes: nextNodes, edges: nextEdges };
       });
-    }, []);
+
+      if (treeId === activeTreeId) {
+        setActiveNodeId(id);
+      }
+    }, [activeTreeId]);
 
   const handlePendingUserMessageFailed = useCallback(({ id, parentId }: { id: string; parentId: string | null }) => {
     pendingGraphNodeIdsRef.current.delete(id);
@@ -451,6 +455,8 @@ export default function Home() {
       if (treeId !== activeTreeIdRef.current) {
         return;
       }
+
+      setActiveNodeId(assistantId);
 
       setGraph((prev) => {
         const hasPending = prev.nodes.some((node) => node.id === pendingUserId);
