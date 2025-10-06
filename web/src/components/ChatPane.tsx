@@ -1,8 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { PathResponse } from '../lib/api';
-import { fetchJSON, API_BASE } from '../lib/api';
+import type { FileMetadata, MessageAttachment, PathResponse } from '../lib/api';
+import { fetchJSON, API_BASE, authHeaders } from '../lib/api';
+import {
+  requestSignedUpload,
+  uploadToSignedUrl,
+  completeUpload,
+  deleteFile,
+  validateFile,
+  formatFileSize,
+  isImage,
+} from '../lib/uploads';
 
 type MarkdownCodeProps = {
   inline?: boolean;
@@ -43,6 +52,23 @@ type Props = {
 
 type DisplayMessage = PathResponse['path'][number] & { id?: string; pending?: boolean };
 
+type ComposerAttachmentStatus = 'signing' | 'uploading' | 'processing' | 'ready' | 'error';
+
+type ComposerAttachment = {
+  clientId: string;
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+  status: ComposerAttachmentStatus;
+  progress: number;
+  fileId?: string;
+  metadata?: FileMetadata;
+  error?: string;
+};
+
+const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+
 export default function ChatPane({
   activeNodeId,
   treeId,
@@ -62,12 +88,16 @@ export default function ChatPane({
   const [input, setInput] = useState('');
   const [justCopiedId, setJustCopiedId] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTargetRef = useRef<string | null>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baseAutoScrollNodeRef = useRef<'__initial__' | '__none__'>('__initial__');
   const pathStoreRef = useRef<Map<string, DisplayMessage[]>>(new Map());
   const [pathSnapshot, setPathSnapshot] = useState<DisplayMessage[]>([]);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
   const activeKeyRef = useRef<string>('');
   const sendingKeysRef = useRef<Set<string>>(new Set());
   const [sendingVersion, setSendingVersion] = useState(0);
@@ -81,6 +111,7 @@ export default function ChatPane({
         content: string;
         userId: string | null;
         active: boolean;
+        attachments: MessageAttachment[];
       }
     >
   >(new Map());
@@ -96,6 +127,172 @@ export default function ChatPane({
   }, []);
 
   const currentKey = computeKey(treeId, effectiveNodeId);
+
+  const createAttachmentClientId = useCallback(() => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }, []);
+
+  const metadataToAttachment = useCallback((metadata: FileMetadata): MessageAttachment => {
+    return {
+      id: metadata.id,
+      filename: metadata.filename,
+      content_type: metadata.content_type,
+      size: metadata.size,
+      status: metadata.status,
+      download_url: metadata.download_url ?? undefined,
+      thumbnail_url: metadata.thumbnail_url ?? undefined,
+    };
+  }, []);
+
+  const updateAttachment = useCallback(
+    (clientId: string, updater: (current: ComposerAttachment) => ComposerAttachment) => {
+      setAttachments((prev) =>
+        prev.map((item) => (item.clientId === clientId ? updater(item) : item))
+      );
+    },
+    []
+  );
+
+  const removeAttachmentById = useCallback((clientId: string) => {
+    setAttachments((prev) => prev.filter((item) => item.clientId !== clientId));
+  }, []);
+
+  const handleFiles = useCallback(
+    (incoming: FileList | File[]) => {
+      const filesArray = Array.from(incoming);
+      if (filesArray.length === 0) return;
+      setUploadError(null);
+
+      if (attachments.length + filesArray.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+        setUploadError(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files per message.`);
+        return;
+      }
+
+      filesArray.forEach((file) => {
+        const validationError = validateFile(file);
+        if (validationError) {
+          setUploadError(validationError);
+          return;
+        }
+
+        const clientId = createAttachmentClientId();
+        const baseAttachment: ComposerAttachment = {
+          clientId,
+          file,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          status: 'signing',
+          progress: 0,
+        };
+
+        setAttachments((prev) => [...prev, baseAttachment]);
+
+        (async () => {
+          try {
+            const signed = await requestSignedUpload(file, treeId);
+            updateAttachment(clientId, (current) => ({
+              ...current,
+              status: 'uploading',
+              fileId: signed.file_id,
+              progress: 1,
+            }));
+
+            await uploadToSignedUrl(file, signed, (percent) => {
+              updateAttachment(clientId, (current) => ({
+                ...current,
+                status: current.status === 'error' ? current.status : 'uploading',
+                progress: percent,
+              }));
+            });
+
+            updateAttachment(clientId, (current) => ({ ...current, status: 'processing', progress: 100 }));
+
+            const metadata = await completeUpload(signed.file_id, treeId);
+            updateAttachment(clientId, (current) => ({
+              ...current,
+              status: 'ready',
+              metadata,
+              progress: 100,
+            }));
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Upload failed';
+            console.error('Attachment upload failed', err);
+            updateAttachment(clientId, (current) => ({
+              ...current,
+              status: 'error',
+              error: message,
+            }));
+            setUploadError(message);
+          }
+        })();
+      });
+    },
+    [attachments.length, createAttachmentClientId, treeId, updateAttachment]
+  );
+
+  const handleFileInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (!files) return;
+      handleFiles(files);
+      event.target.value = '';
+    },
+    [handleFiles]
+  );
+
+  const handleRemoveAttachment = useCallback(
+    async (clientId: string) => {
+      const target = attachments.find((item) => item.clientId === clientId);
+      if (!target) return;
+      removeAttachmentById(clientId);
+      setUploadError(null);
+      if (target.fileId) {
+        try {
+          await deleteFile(target.fileId);
+        } catch (err) {
+          console.error('Failed to delete attachment', err);
+        }
+      }
+    },
+    [attachments, removeAttachmentById]
+  );
+
+  const triggerFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragActive(true);
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const related = event.relatedTarget as Node | null;
+    if (related && event.currentTarget.contains(related)) {
+      return;
+    }
+    setIsDragActive(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsDragActive(false);
+      const files = event.dataTransfer?.files;
+      if (files && files.length > 0) {
+        handleFiles(files);
+      }
+    },
+    [handleFiles]
+  );
 
   useEffect(() => {
     activeKeyRef.current = currentKey;
@@ -144,6 +341,7 @@ export default function ChatPane({
         ...msg,
         pending: false,
         id: `${msg.role}-${idx}`,
+        attachments: msg.attachments ?? [],
       }));
       pathStoreRef.current.set(targetKey, shaped);
       if (targetKey === activeKeyRef.current) {
@@ -161,6 +359,19 @@ export default function ChatPane({
 
   const activeStream = useMemo(() => streamSessionsRef.current.get(currentKey) ?? null, [currentKey, streamVersion]);
   const isStreaming = Boolean(activeStream?.active);
+
+  const readyAttachments = useMemo(
+    () => attachments.filter((att) => att.status === 'ready' && att.metadata && att.fileId),
+    [attachments]
+  );
+
+  const hasPendingUploads = useMemo(
+    () =>
+      attachments.some((att) =>
+        att.status === 'signing' || att.status === 'uploading' || att.status === 'processing'
+      ),
+    [attachments]
+  );
 
   useEffect(() => {
     if (!focusComposerToken) return;
@@ -206,6 +417,19 @@ export default function ChatPane({
     const trimmed = input.trim();
     if (trimmed.length === 0) return;
 
+    if (hasPendingUploads) {
+      setUploadError('Please wait for uploads to finish uploading.');
+      return;
+    }
+
+    const readyAttachmentsSnapshot = readyAttachments;
+    const attachmentIds = readyAttachmentsSnapshot.map((att) => att.fileId!).filter(Boolean);
+    const attachmentViews = readyAttachmentsSnapshot
+      .map((att) => (att.metadata ? metadataToAttachment(att.metadata) : null))
+      .filter((att): att is MessageAttachment => Boolean(att));
+
+    const attachmentsBackup = attachments.map((att) => ({ ...att }));
+
     let targetTreeId = treeId;
     if (!targetTreeId && onEnsureTree) {
       targetTreeId = await onEnsureTree();
@@ -215,6 +439,11 @@ export default function ChatPane({
     const parent = activeNodeId ?? defaultParentId ?? null;
     const baseNodeId = effectiveNodeId;
 
+    const usedClientIds = new Set(readyAttachmentsSnapshot.map((att) => att.clientId));
+    if (usedClientIds.size > 0) {
+      setAttachments((prev) => prev.filter((att) => !usedClientIds.has(att.clientId)));
+    }
+
     const stamp = Date.now().toString(36);
     const userPendingId = `pending-user-${stamp}`;
     const assistantPendingId = `pending-assistant-${stamp}`;
@@ -223,8 +452,8 @@ export default function ChatPane({
     const basePath = pathStoreRef.current.get(baseKey) ?? (baseKey === currentKey ? pathSnapshot : []);
     const initialPath: DisplayMessage[] = [
       ...basePath.map((msg) => ({ ...msg })),
-      { role: 'user', content: trimmed, pending: true, id: userPendingId },
-      { role: 'assistant', content: '', pending: true, id: assistantPendingId },
+      { role: 'user', content: trimmed, pending: true, id: userPendingId, attachments: attachmentViews },
+      { role: 'assistant', content: '', pending: true, id: assistantPendingId, attachments: [] },
     ];
 
     const pendingKey = computeKey(targetTreeId, userPendingId);
@@ -245,6 +474,7 @@ export default function ChatPane({
       content: '',
       userId: null,
       active: true,
+      attachments: attachmentViews,
     });
     setStreamVersion((prev) => prev + 1);
 
@@ -281,8 +511,9 @@ export default function ChatPane({
           tree_id: targetTreeId,
           parent_id: parent,
           content: trimmed,
+          attachments: attachmentIds,
         }),
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         signal: controller.signal,
       });
 
@@ -303,6 +534,9 @@ export default function ChatPane({
           const payload = JSON.parse(line);
           if (payload.type === 'start') {
             serverUserId = payload.user_id ?? null;
+            const attachmentPayload = Array.isArray(payload.attachments)
+              ? (payload.attachments as MessageAttachment[])
+              : [];
             updateStreamPath((prev) =>
               prev.map((msg) => {
                 if (msg.id === userPendingId) {
@@ -310,6 +544,7 @@ export default function ChatPane({
                     ...msg,
                     id: serverUserId ?? msg.id,
                     pending: false,
+                    attachments: attachmentPayload,
                   };
                 }
                 return msg;
@@ -318,6 +553,7 @@ export default function ChatPane({
             const current = streamSessionsRef.current.get(streamKey);
             if (current) {
               current.userId = serverUserId;
+              current.attachments = attachmentPayload;
             }
             setStreamVersion((prev) => prev + 1);
           } else if (payload.type === 'token') {
@@ -414,6 +650,7 @@ export default function ChatPane({
       });
     } catch (err) {
       console.error('Failed to send message', err);
+      setAttachments(attachmentsBackup);
       if (err instanceof DOMException && err.name === 'AbortError') {
         // Cancelled by user
         updateStreamPath((prev) => prev.filter((msg) => msg.id !== assistantPendingId));
@@ -524,49 +761,86 @@ export default function ChatPane({
                     <span className="loading-text">Awaiting response…</span>
                   </div>
                 ) : (
-                  <div className="markdown-wrapper">
-                    <ReactMarkdown
-                      className="markdown"
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        code(componentProps) {
-                          const { inline, className, children, ...props } = componentProps as MarkdownCodeProps;
-                          const restProps = props as Record<string, unknown>;
-                          if (inline) {
+                  <>
+                    <div className="markdown-wrapper">
+                      <ReactMarkdown
+                        className="markdown"
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code(componentProps) {
+                            const { inline, className, children, ...props } = componentProps as MarkdownCodeProps;
+                            const restProps = props as Record<string, unknown>;
+                            if (inline) {
+                              return (
+                                <code className={className} {...restProps}>
+                                  {children}
+                                </code>
+                              );
+                            }
+                            blockIndex += 1;
+                            const codeId = `${messageId}-code-${blockIndex}`;
+                            const rawCode = String(children).replace(/\n$/, '');
                             return (
-                              <code className={className} {...restProps}>
-                                {children}
-                              </code>
+                              <div className="code-block">
+                                <pre className={className} {...restProps}>
+                                  <code>{children}</code>
+                                </pre>
+                                <div className="copy-row">
+                                  <button
+                                    type="button"
+                                    className="copy-button"
+                                    onClick={() => handleCopy(codeId, rawCode)}
+                                    aria-label="Copy code block"
+                                    title="Copy code block"
+                                  >
+                                    <span aria-hidden>{justCopiedId === codeId ? '✅' : '📋'}</span>
+                                  </button>
+                                </div>
+                              </div>
                             );
-                          }
-                          blockIndex += 1;
-                          const codeId = `${messageId}-code-${blockIndex}`;
-                          const rawCode = String(children).replace(/\n$/, '');
+                          },
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
+                      {isStreamingMessage && <span className="stream-caret" aria-hidden />}
+                    </div>
+                    {m.attachments && m.attachments.length > 0 && (
+                      <div className="attachment-list">
+                        {m.attachments.map((attachment) => {
+                          const imagePreview = isImage(attachment.content_type);
+                          const previewUrl = imagePreview
+                            ? attachment.thumbnail_url || attachment.download_url || undefined
+                            : undefined;
                           return (
-                            <div className="code-block">
-                              <pre className={className} {...restProps}>
-                                <code>{children}</code>
-                              </pre>
-                              <div className="copy-row">
-                                <button
-                                  type="button"
-                                  className="copy-button"
-                                  onClick={() => handleCopy(codeId, rawCode)}
-                                  aria-label="Copy code block"
-                                  title="Copy code block"
-                                >
-                                  <span aria-hidden>{justCopiedId === codeId ? '✅' : '📋'}</span>
-                                </button>
+                            <div className="attachment-item" key={`${messageId}-att-${attachment.id}`}>
+                              <div className="attachment-preview">
+                                {imagePreview && previewUrl ? (
+                                  <a href={attachment.download_url ?? previewUrl ?? '#'} target="_blank" rel="noreferrer">
+                                    <img src={previewUrl} alt={attachment.filename} />
+                                  </a>
+                                ) : (
+                                  <span className="attachment-icon" aria-hidden>
+                                    📎
+                                  </span>
+                                )}
+                              </div>
+                              <div className="attachment-details">
+                                {attachment.download_url ? (
+                                  <a href={attachment.download_url} target="_blank" rel="noreferrer">
+                                    {attachment.filename}
+                                  </a>
+                                ) : (
+                                  <span>{attachment.filename}</span>
+                                )}
+                                <span className="attachment-size">{formatFileSize(attachment.size)}</span>
                               </div>
                             </div>
                           );
-                        },
-                      }}
-                    >
-                      {m.content}
-                    </ReactMarkdown>
-                    {isStreamingMessage && <span className="stream-caret" aria-hidden />}
-                  </div>
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               <div className="copy-row">
@@ -586,7 +860,57 @@ export default function ChatPane({
         })}
       </div>
 
-      <div className="composer">
+      <div
+        className={`composer${isDragActive ? ' drag-active' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <input
+          type="file"
+          multiple
+          ref={fileInputRef}
+          onChange={handleFileInputChange}
+          className="file-input"
+        />
+        {attachments.length > 0 && (
+          <div className="composer-attachments">
+            {attachments.map((attachment) => (
+              <div className={`composer-attachment ${attachment.status}`} key={attachment.clientId}>
+                <div className="composer-attachment-header">
+                  <span className="name">{attachment.name}</span>
+                  <span className="size">{formatFileSize(attachment.size)}</span>
+                </div>
+                {attachment.status === 'uploading' || attachment.status === 'processing' ? (
+                  <div className="composer-attachment-progress">
+                    <div className="progress-track">
+                      <div className="bar" style={{ width: `${attachment.progress}%` }} />
+                    </div>
+                    <span className="label">
+                      {attachment.status === 'processing' ? 'Processing…' : `${attachment.progress}%`}
+                    </span>
+                  </div>
+                ) : null}
+                {attachment.status === 'ready' && (
+                  <div className="composer-attachment-status ready">Ready</div>
+                )}
+                {attachment.status === 'error' && (
+                  <div className="composer-attachment-status error">{attachment.error ?? 'Upload failed'}</div>
+                )}
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => void handleRemoveAttachment(attachment.clientId)}
+                  aria-label="Remove attachment"
+                  title="Remove attachment"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {uploadError && <div className="upload-error">{uploadError}</div>}
         <textarea
           placeholder="Send a message…"
           value={input}
@@ -596,13 +920,16 @@ export default function ChatPane({
           ref={composerRef}
         />
         <div className="composer-actions">
+          <button type="button" className="secondary attach" onClick={triggerFilePicker}>
+            Attach
+          </button>
           {isStreaming && (
             <button type="button" className="secondary" onClick={handleStopStream}>
               Stop
             </button>
           )}
-          <button onClick={() => void send()} disabled={isSending || input.trim().length === 0}>
-            Send
+          <button onClick={() => void send()} disabled={isSending || input.trim().length === 0 || hasPendingUploads}>
+            {hasPendingUploads ? 'Uploading…' : 'Send'}
           </button>
         </div>
       </div>
@@ -690,6 +1017,57 @@ export default function ChatPane({
           line-height: 1.6;
           overflow: hidden;
           word-break: break-word;
+        }
+        .attachment-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-top: 12px;
+        }
+        .attachment-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: rgba(64, 65, 79, 0.45);
+          border: 1px solid #565869;
+          border-radius: 12px;
+          padding: 10px 12px;
+        }
+        .attachment-preview {
+          width: 56px;
+          height: 56px;
+          border-radius: 10px;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(52, 53, 65, 0.9);
+        }
+        .attachment-preview img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .attachment-icon {
+          font-size: 22px;
+        }
+        .attachment-details {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .attachment-details a,
+        .attachment-details span {
+          font-size: 13px;
+          color: #ececf1;
+          text-decoration: none;
+        }
+        .attachment-details a:hover {
+          text-decoration: underline;
+        }
+        .attachment-size {
+          font-size: 12px;
+          color: #8e8ea0;
         }
         .markdown-wrapper {
           display: flex;
@@ -848,6 +1226,110 @@ export default function ChatPane({
           display: flex;
           flex-direction: column;
           gap: 12px;
+          position: relative;
+          transition: background 0.18s ease, border-color 0.18s ease;
+        }
+        .composer.drag-active {
+          border-color: #10a37f;
+          background: rgba(16, 163, 127, 0.1);
+        }
+        .file-input {
+          display: none;
+        }
+        .composer-attachments {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          background: #2f303d;
+          border: 1px solid #565869;
+          border-radius: 12px;
+          padding: 12px;
+        }
+        .composer-attachment {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 8px 12px;
+          background: rgba(64, 65, 79, 0.45);
+          border-radius: 10px;
+          padding: 10px 12px;
+          position: relative;
+        }
+        .composer-attachment-header {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .composer-attachment .name {
+          font-size: 13px;
+          font-weight: 600;
+          color: #ececf1;
+        }
+        .composer-attachment .size {
+          font-size: 12px;
+          color: #8e8ea0;
+        }
+        .composer-attachment-progress {
+          grid-column: 1 / span 2;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .composer-attachment-progress .progress-track {
+          flex: 1;
+          height: 6px;
+          border-radius: 999px;
+          background: rgba(86, 88, 105, 0.7);
+          overflow: hidden;
+        }
+        .composer-attachment-progress .bar {
+          height: 100%;
+          background: #10a37f;
+          transition: width 0.2s ease;
+        }
+        .composer-attachment-progress .label {
+          font-size: 12px;
+          color: #c5c5d2;
+          min-width: 56px;
+          text-align: right;
+        }
+        .composer-attachment-status {
+          grid-column: 1 / span 1;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .composer-attachment-status.ready {
+          color: #10a37f;
+        }
+        .composer-attachment-status.error {
+          color: #ef4146;
+        }
+        .icon-button {
+          border: none;
+          background: rgba(64, 65, 79, 0.55);
+          color: #ececf1;
+          border-radius: 999px;
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background 0.18s ease;
+        }
+        .icon-button:hover {
+          background: rgba(64, 65, 79, 0.8);
+        }
+        .composer-attachment button.icon-button {
+          grid-row: 1 / span 3;
+          justify-self: end;
+        }
+        .upload-error {
+          font-size: 12px;
+          color: #ef4146;
+          background: rgba(239, 65, 70, 0.1);
+          border: 1px solid rgba(239, 65, 70, 0.3);
+          border-radius: 10px;
+          padding: 6px 10px;
         }
         textarea {
           width: 100%;
@@ -869,6 +1351,9 @@ export default function ChatPane({
           display: flex;
           justify-content: flex-end;
           gap: 8px;
+        }
+        .composer-actions .attach {
+          margin-right: auto;
         }
         button {
           border-radius: 999px;

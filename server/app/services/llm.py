@@ -25,7 +25,6 @@ def complete(messages: List[Dict]) -> str:
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=messages,
-        temperature=0.2
     )
     return resp.choices[0].message.content
 
@@ -43,7 +42,6 @@ def stream_complete(messages: List[Dict]) -> Iterator[str]:
     stream = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=messages,
-        temperature=0.2,
         stream=True,
     )
     for chunk in stream:

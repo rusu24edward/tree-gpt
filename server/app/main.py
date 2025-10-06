@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import Base, engine
-from .routers import messages, trees
+from .routers import messages, trees, files
 
 # Create tables (simple starter; prefer Alembic later)
 Base.metadata.create_all(bind=engine)
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(trees.router, prefix="/api")
 app.include_router(messages.router, prefix="/api")
+app.include_router(files.router, prefix="/api")
 
 @app.get("/healthz")
 def health():

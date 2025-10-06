@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Iterable
 from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -54,14 +54,14 @@ def get_message(db: Session, message_id: UUID) -> Optional[models.Message]:
 def get_path_to_root(db: Session, message_id: UUID) -> List[Dict[str, Any]]:
     sql = text("""
     WITH RECURSIVE path AS (
-      SELECT id, parent_id, role, content, created_at, 0 as depth
+      SELECT id, parent_id, role, content, meta, created_at, 0 as depth
       FROM messages WHERE id = :mid
       UNION ALL
-      SELECT m.id, m.parent_id, m.role, m.content, m.created_at, p.depth + 1
+      SELECT m.id, m.parent_id, m.role, m.content, m.meta, m.created_at, p.depth + 1
       FROM messages m
       JOIN path p ON m.id = p.parent_id
     )
-    SELECT id, parent_id, role, content, created_at, depth
+    SELECT id, parent_id, role, content, meta, created_at, depth
     FROM path
     ORDER BY depth DESC;
     """)
@@ -84,7 +84,7 @@ def get_root_message(db: Session, tree_id: UUID) -> Optional[models.Message]:
         return sys_root
     return q.order_by(models.Message.created_at.asc()).first()
 
-def delete_subtree(db: Session, message_id: UUID) -> int:
+def get_subtree_message_ids(db: Session, message_id: UUID) -> List[UUID]:
     sql = text("""
     WITH RECURSIVE subtree AS (
       SELECT id FROM messages WHERE id = :mid
@@ -92,9 +92,58 @@ def delete_subtree(db: Session, message_id: UUID) -> int:
       SELECT m.id FROM messages m
       JOIN subtree s ON m.parent_id = s.id
     )
-    DELETE FROM messages WHERE id IN (SELECT id FROM subtree)
-    RETURNING id;
+    SELECT id FROM subtree;
     """)
     rows = db.execute(sql, {"mid": str(message_id)}).fetchall()
+    return [UUID(str(row[0])) for row in rows]
+
+
+def delete_subtree(db: Session, message_id: UUID) -> int:
+    ids = get_subtree_message_ids(db, message_id)
+    if not ids:
+        return 0
+    db.query(models.Message).filter(models.Message.id.in_(ids)).delete(synchronize_session=False)
     db.commit()
-    return len(rows)
+    return len(ids)
+
+
+def get_files_for_messages(db: Session, message_ids: Iterable[UUID]) -> List[models.FileAsset]:
+    ids = list(message_ids)
+    if not ids:
+        return []
+    return (
+        db.query(models.FileAsset)
+        .filter(models.FileAsset.message_id.in_(ids), models.FileAsset.deleted_at.is_(None))
+        .all()
+    )
+
+
+def delete_files_for_messages(db: Session, message_ids: Iterable[UUID]) -> List[models.FileAsset]:
+    ids = list(message_ids)
+    if not ids:
+        return []
+    rows = (
+        db.query(models.FileAsset)
+        .filter(models.FileAsset.message_id.in_(ids), models.FileAsset.deleted_at.is_(None))
+        .all()
+    )
+    return rows
+
+
+def delete_files_for_tree(db: Session, tree_id: UUID) -> List[models.FileAsset]:
+    rows = (
+        db.query(models.FileAsset)
+        .filter(models.FileAsset.tree_id == tree_id, models.FileAsset.deleted_at.is_(None))
+        .all()
+    )
+    return rows
+
+
+def update_message_meta(db: Session, message_id: UUID, meta: Optional[Dict[str, Any]]) -> Optional[models.Message]:
+    msg = db.query(models.Message).filter(models.Message.id == message_id).first()
+    if not msg:
+        return None
+    msg.meta = meta
+    db.commit()
+    db.refresh(msg)
+    return msg

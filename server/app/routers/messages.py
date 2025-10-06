@@ -2,13 +2,15 @@ import json
 import time
 from typing import Dict, List, Optional, Iterator
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import schemas, crud, models
 from ..services.llm import build_messages, complete, stream_complete, client as llm_client
 from ..services.summarizer import maybe_summarize
+from ..services import files as file_service
+from ..deps import get_current_user_id
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
@@ -122,19 +124,58 @@ def get_graph(tree_id: UUID, db: Session = Depends(get_db)):
     return {"nodes": nodes, "edges": edges}
 
 @router.get("/path/{message_id}", response_model=schemas.PathResponse)
-def get_path(message_id: UUID, db: Session = Depends(get_db)):
+def get_path(
+    message_id: UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
     rows = crud.get_path_to_root(db, message_id)
-    path = [{"role": r["role"], "content": r["content"]} for r in rows]
+    message_ids = [UUID(str(r["id"])) for r in rows if r.get("id")]
+    attachments = crud.get_files_for_messages(db, message_ids)
+    grouped = {}
+    for attachment in attachments:
+        if attachment.uploader_id != user_id:
+            continue
+        grouped.setdefault(attachment.message_id, []).append(attachment)
+
+    path: List[schemas.PathMessage] = []
+    for row in rows:
+        msg_id = UUID(str(row["id"])) if row.get("id") else None
+        att_models = [file_service.serialize_for_message(a) for a in grouped.get(msg_id, [])]
+        path.append(
+            schemas.PathMessage(
+                role=row["role"],
+                content=row["content"],
+                attachments=att_models,
+            )
+        )
     return {"path": path}
 
 @router.post("", response_model=schemas.MessageOut)
-def post_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
+def post_message(
+    payload: schemas.MessageCreate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
     # If no parent was chosen, default to the seeded root (if present)
     parent_id = payload.parent_id
     if parent_id is None:
         root = crud.get_root_message(db, payload.tree_id)
         if root:
             parent_id = root.id
+
+    attachment_ids = payload.attachments or []
+    if len(attachment_ids) > file_service.MAX_ATTACHMENTS_PER_MESSAGE:
+        raise HTTPException(status_code=400, detail="Too many attachments")
+
+    try:
+        attachment_records = file_service.require_files(db, user_id, attachment_ids)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    meta = None
+    if attachment_records:
+        meta = {"attachments": [str(record.id) for record in attachment_records]}
 
     # 1) create the user message (now guaranteed to branch from root when no parent selected)
     user_msg = crud.create_message(
@@ -143,7 +184,14 @@ def post_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
         role="user",
         content=payload.content,
         parent_id=parent_id,
+        meta=meta,
     )
+
+    if attachment_records:
+        try:
+            file_service.mark_files_attached(db, attachment_records, payload.tree_id, user_msg.id)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=str(err))
 
     # 2) build path (ancestor chain including this new user node)
     rows = crud.get_path_to_root(db, user_msg.id)
@@ -164,7 +212,14 @@ def post_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
         content=answer,
         parent_id=user_msg.id,
     )
-    return asst
+    return schemas.MessageOut(
+        id=asst.id,
+        tree_id=asst.tree_id,
+        parent_id=asst.parent_id,
+        role=asst.role,
+        content=asst.content,
+        attachments=[],
+    )
 
 
 def _encode_event(payload: Dict) -> bytes:
@@ -172,12 +227,29 @@ def _encode_event(payload: Dict) -> bytes:
 
 
 @router.post("/stream")
-def post_message_stream(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
+def post_message_stream(
+    payload: schemas.MessageCreate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
     parent_id = payload.parent_id
     if parent_id is None:
         root = crud.get_root_message(db, payload.tree_id)
         if root:
             parent_id = root.id
+
+    attachment_ids = payload.attachments or []
+    if len(attachment_ids) > file_service.MAX_ATTACHMENTS_PER_MESSAGE:
+        raise HTTPException(status_code=400, detail="Too many attachments")
+
+    try:
+        attachment_records = file_service.require_files(db, user_id, attachment_ids)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    meta = None
+    if attachment_records:
+        meta = {"attachments": [str(record.id) for record in attachment_records]}
 
     user_msg = crud.create_message(
         db,
@@ -185,7 +257,16 @@ def post_message_stream(payload: schemas.MessageCreate, db: Session = Depends(ge
         role="user",
         content=payload.content,
         parent_id=parent_id,
+        meta=meta,
     )
+
+    if attachment_records:
+        try:
+            file_service.mark_files_attached(db, attachment_records, payload.tree_id, user_msg.id)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=str(err))
+
+    serialized_attachments = [file_service.serialize_for_message(rec) for rec in attachment_records]
 
     rows = crud.get_path_to_root(db, user_msg.id)
     path_msgs = [{"role": r["role"], "content": r["content"]} for r in rows]
@@ -202,6 +283,7 @@ def post_message_stream(payload: schemas.MessageCreate, db: Session = Depends(ge
                 "tree_id": str(user_msg.tree_id),
                 "user_id": str(user_msg.id),
                 "parent_id": str(parent_id) if parent_id else None,
+                "attachments": [a.model_dump() for a in serialized_attachments],
             }
         )
 
@@ -299,7 +381,11 @@ def fork_branch(message_id: UUID, db: Session = Depends(get_db)):
     return {"tree": new_tree, "active_node_id": str(last_clone.id)}
 
 @router.delete("/{message_id}")
-def delete_message(message_id: UUID, db: Session = Depends(get_db)):
+def delete_message(
+    message_id: UUID,
+    db: Session = Depends(get_db),
+    _user_id: str = Depends(get_current_user_id),
+):
     target = crud.get_message(db, message_id)
     if not target:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -309,6 +395,11 @@ def delete_message(message_id: UUID, db: Session = Depends(get_db)):
         parent = crud.get_message(db, target.parent_id)
         if parent and parent.role == "user":
             delete_id = parent.id
+
+    subtree_ids = crud.get_subtree_message_ids(db, delete_id)
+    files_to_delete = crud.delete_files_for_messages(db, subtree_ids)
+    if files_to_delete:
+        file_service.delete_files(db, None, [f.id for f in files_to_delete])
 
     deleted = crud.delete_subtree(db, delete_id)
     if deleted == 0:
