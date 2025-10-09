@@ -3,6 +3,7 @@ import time
 from typing import Dict, List, Optional, Iterator
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -223,7 +224,7 @@ def post_message(
 
 
 def _encode_event(payload: Dict) -> bytes:
-    return (json.dumps(payload) + "\n").encode("utf-8")
+    return (json.dumps(jsonable_encoder(payload)) + "\n").encode("utf-8")
 
 
 @router.post("/stream")
