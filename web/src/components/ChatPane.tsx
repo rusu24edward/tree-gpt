@@ -97,6 +97,7 @@ export default function ChatPane({
   const [pathSnapshot, setPathSnapshot] = useState<DisplayMessage[]>([]);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploadErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const activeKeyRef = useRef<string>('');
   const sendingKeysRef = useRef<Set<string>>(new Set());
@@ -135,16 +136,35 @@ export default function ChatPane({
     return `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }, []);
 
-  const metadataToAttachment = useCallback((metadata: FileMetadata): MessageAttachment => {
-    return {
-      id: metadata.id,
-      filename: metadata.filename,
-      content_type: metadata.content_type,
-      size: metadata.size,
-      status: metadata.status,
-      download_url: metadata.download_url ?? undefined,
-      thumbnail_url: metadata.thumbnail_url ?? undefined,
-    };
+const metadataToAttachment = useCallback((metadata: FileMetadata): MessageAttachment => {
+  return {
+    id: metadata.id,
+    filename: metadata.filename,
+    content_type: metadata.content_type,
+    size: metadata.size,
+    status: metadata.status,
+    download_url: metadata.download_url ?? undefined,
+    thumbnail_url: metadata.thumbnail_url ?? undefined,
+  };
+}, []);
+
+  const clearUploadError = useCallback(() => {
+    if (uploadErrorTimeoutRef.current) {
+      clearTimeout(uploadErrorTimeoutRef.current);
+      uploadErrorTimeoutRef.current = null;
+    }
+    setUploadError(null);
+  }, []);
+
+  const showUploadError = useCallback((message: string) => {
+    if (uploadErrorTimeoutRef.current) {
+      clearTimeout(uploadErrorTimeoutRef.current);
+    }
+    setUploadError(message);
+    uploadErrorTimeoutRef.current = setTimeout(() => {
+      setUploadError(null);
+      uploadErrorTimeoutRef.current = null;
+    }, 4000);
   }, []);
 
   const updateAttachment = useCallback(
@@ -164,17 +184,17 @@ export default function ChatPane({
     (incoming: FileList | File[]) => {
       const filesArray = Array.from(incoming);
       if (filesArray.length === 0) return;
-      setUploadError(null);
+      clearUploadError();
 
       if (attachments.length + filesArray.length > MAX_ATTACHMENTS_PER_MESSAGE) {
-        setUploadError(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files per message.`);
+        showUploadError(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files per message.`);
         return;
       }
 
       filesArray.forEach((file) => {
         const validationError = validateFile(file);
         if (validationError) {
-          setUploadError(validationError);
+          showUploadError(validationError);
           return;
         }
 
@@ -192,8 +212,10 @@ export default function ChatPane({
         setAttachments((prev) => [...prev, baseAttachment]);
 
         (async () => {
+          let uploadedFileId: string | null = null;
           try {
             const signed = await requestSignedUpload(file, treeId);
+            uploadedFileId = signed.file_id;
             updateAttachment(clientId, (current) => ({
               ...current,
               status: 'uploading',
@@ -221,17 +243,20 @@ export default function ChatPane({
           } catch (err) {
             const message = err instanceof Error ? err.message : 'Upload failed';
             console.error('Attachment upload failed', err);
-            updateAttachment(clientId, (current) => ({
-              ...current,
-              status: 'error',
-              error: message,
-            }));
-            setUploadError(message);
+            showUploadError(message);
+            removeAttachmentById(clientId);
+            if (uploadedFileId) {
+              try {
+                await deleteFile(uploadedFileId);
+              } catch (deleteErr) {
+                console.error('Failed to delete failed upload', deleteErr);
+              }
+            }
           }
         })();
       });
     },
-    [attachments.length, createAttachmentClientId, treeId, updateAttachment]
+    [clearUploadError, createAttachmentClientId, removeAttachmentById, showUploadError, treeId, updateAttachment]
   );
 
   const handleFileInputChange = useCallback(
@@ -249,7 +274,7 @@ export default function ChatPane({
       const target = attachments.find((item) => item.clientId === clientId);
       if (!target) return;
       removeAttachmentById(clientId);
-      setUploadError(null);
+      clearUploadError();
       if (target.fileId) {
         try {
           await deleteFile(target.fileId);
@@ -258,7 +283,7 @@ export default function ChatPane({
         }
       }
     },
-    [attachments, removeAttachmentById]
+    [attachments, clearUploadError, removeAttachmentById]
   );
 
   const triggerFilePicker = useCallback(() => {
@@ -300,6 +325,15 @@ export default function ChatPane({
     setPathSnapshot(cached);
     setSendingVersion((prev) => prev + 1);
   }, [currentKey]);
+
+  useEffect(() => {
+    return () => {
+      if (uploadErrorTimeoutRef.current) {
+        clearTimeout(uploadErrorTimeoutRef.current);
+        uploadErrorTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const showStartPrompt = Boolean(showEmptyOverlay && pathSnapshot.length === 0);
 
@@ -418,7 +452,7 @@ export default function ChatPane({
     if (trimmed.length === 0) return;
 
     if (hasPendingUploads) {
-      setUploadError('Please wait for uploads to finish uploading.');
+      showUploadError('Please wait for uploads to finish uploading.');
       return;
     }
 
